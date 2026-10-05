@@ -16,6 +16,7 @@ Ifrah Collection ka dress rental business manage karne ke liye ek Windows deskto
 - 🚚 Delivery & Return Management
 - 📊 Business Reports
 - 🔒 User Roles (Owner / Cashier / Viewer)
+- 🧾 Thermal Receipt & Invoice Generation
 - 💾 Offline SQLite Database
 - ☁️ Supabase Cloud Sync (Phase 11)
 
