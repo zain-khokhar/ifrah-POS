@@ -131,4 +131,3 @@ ifrah-pos/
 ---
 
 *Developed with ❤️ for Ifrah Collection*
->>>>>>> 8b806ee (feat: initial commit - Next.js + Electron POS foundation with SQLite schema)
