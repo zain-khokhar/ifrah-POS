@@ -13,7 +13,7 @@
     "start":        "next start",
     "lint":         "eslint src",
     "typecheck":    "echo \"TypeScript check skipped (JS project)\"",
-    "test":         "node --test electron/**/*.test.js"
+    "test":         "node --test electron/**/*.test.js electron/phase3/*.test.js electron/phase4/*.test.js"
   },
   "dependencies": {
     "next":         "16.4.0",

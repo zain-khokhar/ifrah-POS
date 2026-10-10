@@ -1,107 +1,197 @@
 'use client';
+
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { BookOpen, Plus, Search, Filter } from 'lucide-react';
+import {
+  BookOpen, Plus, Search, X, RefreshCw,
+  Edit, Trash2, Eye, Filter,
+} from 'lucide-react';
 
-const MOCK_BOOKINGS = [
-  { id: 'BK-001', publicId: 'BK-001', customer: 'Ayesha Khan',    contact: '0300-1234567', delivery: '10 Oct 2026', returning: '12 Oct 2026', status: 'pending', payStatus: 'partial', total: 25000, paid: 10000 },
-  { id: 'BK-002', publicId: 'BK-002', customer: 'Fatima Ahmed',   contact: '0311-9876543', delivery: '11 Oct 2026', returning: '13 Oct 2026', status: 'open',    payStatus: 'paid',    total: 15000, paid: 15000 },
-  { id: 'BK-003', publicId: 'BK-003', customer: 'Sana Malik',     contact: '0333-5551234', delivery: '09 Oct 2026', returning: '10 Oct 2026', status: 'closed',  payStatus: 'paid',    total: 8000,  paid: 8000  },
-  { id: 'BK-004', publicId: 'BK-004', customer: 'Zara Hussain',   contact: '0345-1112222', delivery: '12 Oct 2026', returning: '14 Oct 2026', status: 'pending', payStatus: 'unpaid',  total: 18000, paid: 0     },
-  { id: 'BK-005', publicId: 'BK-005', customer: 'Hina Baig',      contact: '0321-7778888', delivery: '10 Oct 2026', returning: '11 Oct 2026', status: 'open',    payStatus: 'partial', total: 12000, paid: 5000  },
-];
+const STATUS_CHIP = {
+  None:    { bg: '#f1f5f9', color: '#64748b', label: 'None'    },
+  Open:    { bg: '#dbeafe', color: '#1d4ed8', label: 'Open'    },
+  Pending: { bg: '#fef3c7', color: '#d97706', label: 'Pending' },
+  Closed:  { bg: '#dcfce7', color: '#16a34a', label: 'Closed'  },
+};
 
-const STATUS_MAP    = { pending: 'badge-warning', open: 'badge-info',    closed: 'badge-gray'    };
-const PAY_MAP       = { paid: 'badge-success',    partial: 'badge-warning', unpaid: 'badge-danger' };
-const STATUS_LABELS = { pending: 'Pending', open: 'Open', closed: 'Closed' };
-const PAY_LABELS    = { paid: 'Paid', partial: 'Partial', unpaid: 'Unpaid' };
+function StatusChip({ status }) {
+  const s = STATUS_CHIP[status] || STATUS_CHIP.None;
+  return (
+    <span style={{ background: s.bg, color: s.color, padding: '2px 8px', borderRadius: 20, fontSize: 11.5, fontWeight: 700 }}>
+      {s.label}
+    </span>
+  );
+}
 
 export default function BookingsPage() {
+  const [bookings, setBookings] = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [search,   setSearch]   = useState('');
+  const [status,   setStatus]   = useState('');
+  const [deleting, setDeleting] = useState(null);
+  const [userRole, setUserRole] = useState('viewer');
+  const reloadRef = useRef(null);
+
+  useEffect(() => {
+    window.electronAPI?.auth.session().then(r => { if (r?.ok) setUserRole(r.user.role); });
+  }, []);
+
+  useEffect(() => {
+    async function fetchBookings() {
+      setLoading(true);
+      const res = await window.electronAPI?.bookings.list({ search: search || '', status: status || '' });
+      if (res?.ok) setBookings(res.data || []);
+      setLoading(false);
+    }
+    reloadRef.current = fetchBookings;
+    fetchBookings();
+  }, [search, status]);
+
+  async function handleDelete(b) {
+    if (!window.confirm(`Booking #${b.booking_no} delete karein? Ye action undo ho sakta hai.`)) return;
+    setDeleting(b.id);
+    const res = await window.electronAPI?.bookings.delete(b.id);
+    if (res?.ok === false) alert(res.message || 'Delete failed.');
+    else if (reloadRef.current) reloadRef.current();
+    setDeleting(null);
+  }
+
+  const isOwner   = userRole === 'owner';
+  const isViewer  = userRole === 'viewer';
+
+  const totalGrand   = bookings.reduce((s, b) => s + (b.grand_total || 0), 0);
+  const totalRemain  = bookings.reduce((s, b) => s + (b.remaining  || 0), 0);
+
   return (
     <div>
       <div className="page-header">
         <div>
           <h1 className="page-title">Bookings</h1>
-          <p className="page-subtitle">Sab bookings dekhein, edit karein ya naye banayein</p>
+          <p className="page-subtitle">
+            {loading ? 'Loading…' : `${bookings.length} booking${bookings.length !== 1 ? 's' : ''}`}
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Link href="/bookings/new" className="btn btn-primary">
-            <Plus size={15} /> New Booking
-          </Link>
+          {!isViewer && (
+            <Link href="/bookings/new" className="btn btn-primary">
+              <Plus size={15} /> New Booking
+            </Link>
+          )}
         </div>
       </div>
 
       <div className="page-body">
-        {/* Search & Filter Bar */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-            <input className="form-input" style={{ paddingLeft: 36 }} placeholder="Customer name, Booking ID ya dress se search karein..." />
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
+            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+            <input className="form-input" style={{ paddingLeft: 36 }}
+              placeholder="Booking ID, naam, phone, CNIC..."
+              value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <select className="form-input form-select" style={{ width: 140 }}>
+          <select className="form-input form-select" style={{ width: 140 }} value={status} onChange={e => setStatus(e.target.value)}>
             <option value="">Sab Status</option>
-            <option>Pending</option>
-            <option>Open</option>
-            <option>Closed</option>
+            <option value="None">None</option>
+            <option value="Open">Open</option>
+            <option value="Pending">Pending</option>
+            <option value="Closed">Closed</option>
           </select>
-          <select className="form-input form-select" style={{ width: 140 }}>
-            <option value="">Sab Payment</option>
-            <option>Paid</option>
-            <option>Partial</option>
-            <option>Unpaid</option>
-          </select>
-          <button className="btn btn-secondary">
-            <Filter size={14} /> Filter
-          </button>
+          {(search || status) && (
+            <button className="btn btn-secondary btn-sm" style={{ alignSelf: 'center', whiteSpace: 'nowrap' }}
+              onClick={() => { setSearch(''); setStatus(''); }}>
+              <X size={12} /> Clear
+            </button>
+          )}
         </div>
 
         {/* Table */}
         <div className="card">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Booking ID</th>
-                <th>Customer</th>
-                <th>Contact</th>
-                <th>Delivery</th>
-                <th>Return</th>
-                <th>Booking Status</th>
-                <th>Payment</th>
-                <th style={{ textAlign: 'right' }}>Total</th>
-                <th style={{ textAlign: 'right' }}>Remaining</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {MOCK_BOOKINGS.map(b => (
-                <tr key={b.id}>
-                  <td><span style={{ fontWeight: 700, color: '#7c3aed', fontFamily: 'monospace', fontSize: 13 }}>{b.publicId}</span></td>
-                  <td style={{ fontWeight: 600 }}>{b.customer}</td>
-                  <td style={{ color: '#64748b', fontSize: 12.5 }}>{b.contact}</td>
-                  <td style={{ fontSize: 12.5 }}>{b.delivery}</td>
-                  <td style={{ fontSize: 12.5 }}>{b.returning}</td>
-                  <td><span className={`badge ${STATUS_MAP[b.status]}`}>{STATUS_LABELS[b.status]}</span></td>
-                  <td><span className={`badge ${PAY_MAP[b.payStatus]}`}>{PAY_LABELS[b.payStatus]}</span></td>
-                  <td style={{ textAlign: 'right', fontWeight: 700 }}>Rs. {b.total.toLocaleString()}</td>
-                  <td style={{ textAlign: 'right', color: b.total - b.paid > 0 ? '#ef4444' : '#10b981', fontWeight: 700 }}>
-                    Rs. {(b.total - b.paid).toLocaleString()}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 5 }}>
-                      <button className="btn btn-secondary btn-sm">View</button>
-                      <button className="btn btn-secondary btn-sm">Edit</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#64748b', alignItems: 'center' }}>
-            <span>5 bookings • Mock data (Phase 5 mein real data aayega)</span>
-            <div style={{ display: 'flex', gap: 24, fontWeight: 700, color: '#0f172a' }}>
-              <span>Total: Rs. {MOCK_BOOKINGS.reduce((s,b) => s+b.total, 0).toLocaleString()}</span>
-              <span style={{ color: '#ef4444' }}>Remaining: Rs. {MOCK_BOOKINGS.reduce((s,b) => s+(b.total-b.paid), 0).toLocaleString()}</span>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>
+              <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
+              <div>Loading bookings...</div>
             </div>
-          </div>
+          ) : bookings.length === 0 ? (
+            <div style={{ padding: 56, textAlign: 'center', color: '#94a3b8' }}>
+              <BookOpen size={44} style={{ marginBottom: 12, opacity: 0.35 }} />
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>
+                {search || status ? 'Koi booking nahi mili' : 'Abhi koi booking nahi hai'}
+              </div>
+              <div style={{ fontSize: 13 }}>
+                {search || status ? 'Filters clear karein ya alag search karein.' : 'Pehli booking banayein.'}
+              </div>
+              {!isViewer && !search && !status && (
+                <Link href="/bookings/new" className="btn btn-primary" style={{ marginTop: 16, display: 'inline-flex' }}>
+                  <Plus size={14} /> Pehli Booking Banayein
+                </Link>
+              )}
+            </div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Booking #</th>
+                  <th>Customer</th>
+                  <th>Contact</th>
+                  <th>Delivery</th>
+                  <th>Return</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Total</th>
+                  <th style={{ textAlign: 'right' }}>Remaining</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bookings.map(b => (
+                  <tr key={b.id}>
+                    <td>
+                      <span style={{ fontWeight: 800, color: '#7c3aed', fontFamily: 'monospace', fontSize: 14 }}>
+                        #{b.booking_no}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 600, color: '#0f172a' }}>{b.customer_name || '—'}</td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 12.5, color: '#64748b' }}>{b.customer_phone || '—'}</td>
+                    <td style={{ fontSize: 12.5 }}>{b.delivery_date || '—'}</td>
+                    <td style={{ fontSize: 12.5 }}>{b.returning_date || '—'}</td>
+                    <td><StatusChip status={b.status} /></td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                      {b.grand_total > 0 ? `Rs. ${b.grand_total.toLocaleString()}` : '—'}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: b.remaining > 0 ? '#ef4444' : '#10b981' }}>
+                      {b.grand_total > 0 ? `Rs. ${b.remaining.toLocaleString()}` : '—'}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 5 }}>
+                        {!isViewer && (
+                          <Link href={`/bookings/${b.id}/edit`} className="btn btn-secondary btn-sm">
+                            <Edit size={11} /> Edit
+                          </Link>
+                        )}
+                        {isOwner && (
+                          <button className="btn btn-secondary btn-sm" style={{ color: '#ef4444' }}
+                            onClick={() => handleDelete(b)} disabled={deleting === b.id}>
+                            {deleting === b.id ? '...' : <><Trash2 size={11} /> Delete</>}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {bookings.length > 0 && (
+            <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b', alignItems: 'center' }}>
+              <span>{bookings.length} booking{bookings.length !== 1 ? 's' : ''}{(search || status) ? ' (filtered)' : ''}</span>
+              <div style={{ display: 'flex', gap: 24, fontWeight: 800, color: '#0f172a' }}>
+                <span>Total: Rs. {totalGrand.toLocaleString()}</span>
+                <span style={{ color: totalRemain > 0 ? '#ef4444' : '#10b981' }}>
+                  Remaining: Rs. {totalRemain.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

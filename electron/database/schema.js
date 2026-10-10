@@ -1,28 +1,29 @@
 /**
  * electron/database/schema.js
  *
- * All CREATE TABLE statements for the Ifrah Collection POS.
- * Each table follows the same base pattern:
- *   - id            INTEGER PRIMARY KEY AUTOINCREMENT  (local SQLite ID)
- *   - sync_id       TEXT UNIQUE                        (UUID, used for Supabase sync)
- *   - created_at    TEXT                               (ISO 8601 UTC)
- *   - updated_at    TEXT                               (ISO 8601 UTC)
- *   - deleted_at    TEXT DEFAULT NULL                  (soft delete — NULL = active)
- *   - sync_status   TEXT DEFAULT 'local'               ('local' | 'synced' | 'conflict')
- *   - last_synced_at TEXT DEFAULT NULL
+ * All CREATE TABLE and CREATE INDEX statements for Ifrah Collection POS.
  *
- * Tables:
- *  1. users           — App users (owner / cashier / viewer)
- *  2. customers       — Dress rental customers
- *  3. cities          — City/area reference list
- *  4. casts           — Customer social groups / biradari
- *  5. dresses         — Dress inventory items
- *  6. bookings        — Rental booking records
- *  7. booking_items   — Dresses in a booking (one booking → many dresses)
- *  8. payments        — Payment records (append-only)
- *  9. audit_logs      — Who did what and when (immutable)
- * 10. sync_outbox     — Pending changes to push to Supabase (Phase 11)
- * 11. sync_conflicts  — Conflicts during sync that need resolution (Phase 11)
+ * Design rules (from plans/claude.md §4):
+ *  - id  = INTEGER PRIMARY KEY AUTOINCREMENT  (local SQLite row ID)
+ *  - sync_id = TEXT UNIQUE  (UUID hex, used for cloud sync later)
+ *  - created_at / updated_at = ISO 8601 UTC text
+ *  - deleted_at = NULL while active  (soft delete — never hard delete)
+ *  - sync_status = 'local' | 'synced' | 'conflict'
+ *
+ * Tables
+ *  1.  users              App users  (owner / cashier / viewer)
+ *  2.  cities             Learning dropdown list
+ *  3.  casts              Learning dropdown list  (biradari)
+ *  4.  relation_types     Learning dropdown list  (wife, husband, …)
+ *  5.  dress_categories   Learning dropdown list  (lehenga, saree, …)
+ *  6.  customers          Rental customers
+ *  7.  dresses            Dress catalogue
+ *  8.  bookings           Rental bookings
+ *  9.  booking_items      One row per dress per booking
+ * 10.  payments           Append-only payment records
+ * 11.  audit_logs         Immutable write trail
+ * 12.  sync_outbox        Phase 13 — pending cloud push
+ * 13.  sync_conflicts     Phase 13 — merge conflicts
  */
 
 const SCHEMA_STATEMENTS = [
@@ -35,229 +36,292 @@ const SCHEMA_STATEMENTS = [
     username        TEXT    NOT NULL UNIQUE,
     password_hash   TEXT    NOT NULL,
     full_name       TEXT    NOT NULL,
-    role            TEXT    NOT NULL CHECK(role IN ('owner', 'cashier', 'viewer')),
+    role            TEXT    NOT NULL CHECK(role IN ('owner','cashier','viewer')),
     is_active       INTEGER NOT NULL DEFAULT 1,
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     deleted_at      TEXT    DEFAULT NULL,
     sync_status     TEXT    NOT NULL DEFAULT 'local',
     last_synced_at  TEXT    DEFAULT NULL
   )`,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 2. CITIES
+  // 2. CITIES  (learning dropdown)
   // ──────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS cities (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
-    name            TEXT    NOT NULL UNIQUE,
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    name            TEXT    NOT NULL,
+    name_normalized TEXT    NOT NULL UNIQUE,   -- lowercase, stripped for dedup
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     deleted_at      TEXT    DEFAULT NULL,
     sync_status     TEXT    NOT NULL DEFAULT 'local',
     last_synced_at  TEXT    DEFAULT NULL
   )`,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 3. CASTS (Biradari / Social Group)
+  // 3. CASTS  (biradari / social group — learning dropdown)
   // ──────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS casts (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
-    name            TEXT    NOT NULL UNIQUE,
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    name            TEXT    NOT NULL,
+    name_normalized TEXT    NOT NULL UNIQUE,
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     deleted_at      TEXT    DEFAULT NULL,
     sync_status     TEXT    NOT NULL DEFAULT 'local',
     last_synced_at  TEXT    DEFAULT NULL
   )`,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 4. CUSTOMERS
+  // 4. RELATION_TYPES  (wife, husband, son, … — learning dropdown)
   // ──────────────────────────────────────────────────────────────────────────
-  `CREATE TABLE IF NOT EXISTS customers (
+  `CREATE TABLE IF NOT EXISTS relation_types (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
     name            TEXT    NOT NULL,
-    phone           TEXT,
-    phone2          TEXT,
-    address         TEXT,
-    city_id         INTEGER REFERENCES cities(id),
-    cast_id         INTEGER REFERENCES casts(id),
-    notes           TEXT,
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    name_normalized TEXT    NOT NULL UNIQUE,
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     deleted_at      TEXT    DEFAULT NULL,
     sync_status     TEXT    NOT NULL DEFAULT 'local',
     last_synced_at  TEXT    DEFAULT NULL
   )`,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 5. DRESSES
+  // 5. DRESS_CATEGORIES  (lehenga, saree, … — learning dropdown)
+  // ──────────────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS dress_categories (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
+    name            TEXT    NOT NULL,
+    name_normalized TEXT    NOT NULL UNIQUE,
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    deleted_at      TEXT    DEFAULT NULL,
+    sync_status     TEXT    NOT NULL DEFAULT 'local',
+    last_synced_at  TEXT    DEFAULT NULL
+  )`,
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 6. CUSTOMERS
+  //    Layout from plan §3 task 3:
+  //    Row 1: name, phone, phone2, cnic
+  //    Row 2: relative (relation_type_id, relative_name, relative_phone, relative_cnic)
+  //    Row 3: city_id, cast_id, address
+  // ──────────────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS customers (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    sync_id             TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
+    name                TEXT    NOT NULL,
+    phone               TEXT,                            -- stored as text (leading zeros safe)
+    phone2              TEXT,
+    cnic                TEXT,                            -- format 00000-0000000-0
+    relation_type_id    INTEGER REFERENCES relation_types(id),
+    relative_name       TEXT,
+    relative_phone      TEXT,
+    relative_cnic       TEXT,
+    city_id             INTEGER REFERENCES cities(id),
+    cast_id             INTEGER REFERENCES casts(id),
+    address             TEXT,
+    notes               TEXT,
+    created_by          INTEGER REFERENCES users(id),
+    updated_by          INTEGER REFERENCES users(id),
+    created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    deleted_at          TEXT    DEFAULT NULL,
+    sync_status         TEXT    NOT NULL DEFAULT 'local',
+    last_synced_at      TEXT    DEFAULT NULL
+  )`,
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 7. DRESSES  (dress catalogue)
+  //    'active' flag — deactivate, never hard-delete
+  //    photo_path — optional, copied into app folder
+  //    Only Owner can change rental_price
   // ──────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS dresses (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
-    code            TEXT    NOT NULL UNIQUE,          -- Dress catalog code e.g. "D-001"
+    code            TEXT    NOT NULL UNIQUE,
     name            TEXT    NOT NULL,
-    description     TEXT,
-    category        TEXT,                             -- e.g. "Lehenga", "Saree", "Sharara"
-    color           TEXT,
+    category_id     INTEGER REFERENCES dress_categories(id),
     size            TEXT,
-    rental_price    REAL    NOT NULL DEFAULT 0,
-    security_deposit REAL   NOT NULL DEFAULT 0,
-    is_available    INTEGER NOT NULL DEFAULT 1,       -- Quick availability flag
-    notes           TEXT,
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    rental_price    INTEGER NOT NULL DEFAULT 0,          -- rupees, integer
+    description     TEXT,
+    photo_path      TEXT,
+    active          INTEGER NOT NULL DEFAULT 1,          -- 1 = active, 0 = deactivated
+    created_by      INTEGER REFERENCES users(id),
+    updated_by      INTEGER REFERENCES users(id),
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     deleted_at      TEXT    DEFAULT NULL,
     sync_status     TEXT    NOT NULL DEFAULT 'local',
     last_synced_at  TEXT    DEFAULT NULL
   )`,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 6. BOOKINGS
+  // 8. BOOKINGS
   // ──────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS bookings (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
-    booking_number  TEXT    NOT NULL UNIQUE,          -- Human-readable ID e.g. "BK-2025-001"
-    customer_id     INTEGER NOT NULL REFERENCES customers(id),
-    city_id         INTEGER REFERENCES cities(id),
-    status          TEXT    NOT NULL DEFAULT 'pending'
-                    CHECK(status IN ('pending', 'confirmed', 'delivered', 'returned', 'cancelled')),
-    booking_date    TEXT    NOT NULL,                 -- ISO date YYYY-MM-DD
-    event_date      TEXT,                             -- Date of the actual event
-    delivery_date   TEXT,                             -- Planned delivery date
-    return_date     TEXT,                             -- Planned return date
-    booking_month   TEXT,                             -- Derived month label e.g. "Jan 2025"
-
-    -- Relative info (the person wearing the dress, may differ from customer)
-    relative_name   TEXT,
-    relative_relation TEXT,
-
-    -- Pricing (calculated from booking_items, stored here for quick access)
-    total_amount    REAL    NOT NULL DEFAULT 0,
-    discount        REAL    NOT NULL DEFAULT 0,
-    grand_total     REAL    NOT NULL DEFAULT 0,       -- total_amount - discount
-    amount_paid     REAL    NOT NULL DEFAULT 0,       -- sum of payments
-    remaining       REAL    NOT NULL DEFAULT 0,       -- grand_total - amount_paid
-
-    notes           TEXT,
-    created_by      INTEGER REFERENCES users(id),
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    deleted_at      TEXT    DEFAULT NULL,
-    sync_status     TEXT    NOT NULL DEFAULT 'local',
-    last_synced_at  TEXT    DEFAULT NULL
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    sync_id             TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
+    booking_no          INTEGER NOT NULL UNIQUE,          -- auto-increment human ID (412, 413…)
+    customer_id         INTEGER NOT NULL REFERENCES customers(id),
+    city_id             INTEGER REFERENCES cities(id),
+    status              TEXT    NOT NULL DEFAULT 'None'
+                        CHECK(status IN ('None','Open','Closed','Pending')),
+    booking_date        TEXT,                             -- YYYY-MM-DD
+    delivery_date       TEXT,
+    returning_date      TEXT,
+    booking_month       TEXT,                             -- derived from booking_date
+    total_returning_days INTEGER,                         -- |returning_date - delivery_date|
+    relative_name       TEXT,
+    relative_relation   TEXT,
+    notes               TEXT,
+    delivered_on        TEXT,
+    returned_on         TEXT,
+    return_condition    TEXT,
+    security_deposit    INTEGER NOT NULL DEFAULT 0,
+    discount            INTEGER NOT NULL DEFAULT 0,
+    grand_total         INTEGER NOT NULL DEFAULT 0,       -- sum of line totals - discount
+    amount_paid         INTEGER NOT NULL DEFAULT 0,       -- sum of valid rental payments
+    remaining           INTEGER NOT NULL DEFAULT 0,       -- grand_total - amount_paid
+    created_by          INTEGER REFERENCES users(id),
+    updated_by          INTEGER REFERENCES users(id),
+    created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    deleted_at          TEXT    DEFAULT NULL,
+    sync_status         TEXT    NOT NULL DEFAULT 'local',
+    last_synced_at      TEXT    DEFAULT NULL
   )`,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 7. BOOKING_ITEMS (Dresses in a booking)
+  // 9. BOOKING_ITEMS
+  //    line_no    = 1-based line number within the booking
+  //    detail_no  = booking_no * 100 + line_no  (e.g. 47-01 → 4701)
   // ──────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS booking_items (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
-    booking_id      INTEGER NOT NULL REFERENCES bookings(id),
-    dress_id        INTEGER NOT NULL REFERENCES dresses(id),
-    rental_price    REAL    NOT NULL DEFAULT 0,       -- Price at time of booking (snapshot)
-    security_deposit REAL   NOT NULL DEFAULT 0,
-    notes           TEXT,
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    deleted_at      TEXT    DEFAULT NULL,
-    sync_status     TEXT    NOT NULL DEFAULT 'local',
-    last_synced_at  TEXT    DEFAULT NULL
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    sync_id             TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
+    booking_id          INTEGER NOT NULL REFERENCES bookings(id),
+    line_no             INTEGER NOT NULL,
+    detail_no           INTEGER NOT NULL,                 -- booking_no*100 + line_no
+    dress_id            INTEGER REFERENCES dresses(id),
+    dress_name_snapshot TEXT    NOT NULL,                 -- keeps old receipts correct
+    size                TEXT,
+    quantity            INTEGER NOT NULL DEFAULT 1,
+    rate                INTEGER NOT NULL DEFAULT 0,       -- rupees, snapshot at booking time
+    line_total          INTEGER NOT NULL DEFAULT 0,       -- quantity * rate
+    description         TEXT,
+    jewellery           INTEGER NOT NULL DEFAULT 0,
+    clutch_purse        INTEGER NOT NULL DEFAULT 0,
+    hand_bag            INTEGER NOT NULL DEFAULT 0,
+    double_dupatta      INTEGER NOT NULL DEFAULT 0,
+    shoes               INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    deleted_at          TEXT    DEFAULT NULL,
+    sync_status         TEXT    NOT NULL DEFAULT 'local',
+    last_synced_at      TEXT    DEFAULT NULL
   )`,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 8. PAYMENTS (Append-only — no edit or delete, only void)
+  // 10. PAYMENTS  (append-only; void = add void row, not edit)
   // ──────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS payments (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
     booking_id      INTEGER NOT NULL REFERENCES bookings(id),
-    amount          REAL    NOT NULL,
+    amount          INTEGER NOT NULL,                     -- rupees
     payment_method  TEXT    NOT NULL DEFAULT 'cash'
-                    CHECK(payment_method IN ('cash', 'easypaisa', 'jazzcash', 'bank_transfer', 'other')),
-    payment_type    TEXT    NOT NULL DEFAULT 'advance'
-                    CHECK(payment_type IN ('advance', 'partial', 'full', 'security', 'void')),
-    reference_no    TEXT,                             -- Bank/JazzCash transaction ref
-    note            TEXT,
+                    CHECK(payment_method IN ('cash','bank','wallet','other')),
+    kind            TEXT    NOT NULL DEFAULT 'rental'
+                    CHECK(kind IN ('rental','deposit','deposit_refund')),
     received_by     INTEGER REFERENCES users(id),
-    payment_date    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    note            TEXT,
+    paid_on         TEXT    NOT NULL,                     -- YYYY-MM-DD
     is_void         INTEGER NOT NULL DEFAULT 0,
     void_reason     TEXT,
     voided_by       INTEGER REFERENCES users(id),
     voided_at       TEXT    DEFAULT NULL,
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     sync_status     TEXT    NOT NULL DEFAULT 'local',
     last_synced_at  TEXT    DEFAULT NULL
   )`,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 9. AUDIT_LOGS (Immutable — no delete)
+  // 11. AUDIT_LOGS  (immutable — never delete)
   // ──────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS audit_logs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
     user_id         INTEGER REFERENCES users(id),
-    action          TEXT    NOT NULL,                 -- e.g. 'booking.create', 'payment.void'
+    action          TEXT    NOT NULL,
     table_name      TEXT,
     record_id       INTEGER,
-    old_values      TEXT,                             -- JSON snapshot before change
-    new_values      TEXT,                             -- JSON snapshot after change
-    ip_address      TEXT,
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    old_values      TEXT,
+    new_values      TEXT,
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   )`,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 10. SYNC_OUTBOX (Phase 11 — offline changes waiting to sync to Supabase)
+  // 12. SYNC_OUTBOX  (Phase 13)
   // ──────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS sync_outbox (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     table_name      TEXT    NOT NULL,
-    operation       TEXT    NOT NULL CHECK(operation IN ('INSERT', 'UPDATE', 'DELETE')),
+    operation       TEXT    NOT NULL CHECK(operation IN ('INSERT','UPDATE','DELETE')),
     record_sync_id  TEXT    NOT NULL,
-    payload         TEXT    NOT NULL,                 -- JSON of changed data
+    payload         TEXT    NOT NULL,
     status          TEXT    NOT NULL DEFAULT 'pending'
-                    CHECK(status IN ('pending', 'processing', 'done', 'failed')),
+                    CHECK(status IN ('pending','processing','done','failed')),
     attempts        INTEGER NOT NULL DEFAULT 0,
     last_error      TEXT,
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   )`,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 11. SYNC_CONFLICTS (Phase 11 — conflicts that need manual resolution)
+  // 13. SYNC_CONFLICTS  (Phase 13)
   // ──────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS sync_conflicts (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     table_name      TEXT    NOT NULL,
     record_sync_id  TEXT    NOT NULL,
-    local_data      TEXT    NOT NULL,                 -- JSON of local version
-    remote_data     TEXT    NOT NULL,                 -- JSON of Supabase version
-    resolution      TEXT    CHECK(resolution IN ('local', 'remote', 'manual', NULL)),
+    local_data      TEXT    NOT NULL,
+    remote_data     TEXT    NOT NULL,
+    resolution      TEXT    CHECK(resolution IN ('local','remote','manual',NULL)),
     resolved_by     INTEGER REFERENCES users(id),
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     resolved_at     TEXT    DEFAULT NULL
   )`,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // INDEXES — for common queries
+  // INDEXES — keep searches fast with 5 000+ bookings
   // ──────────────────────────────────────────────────────────────────────────
-  `CREATE INDEX IF NOT EXISTS idx_customers_phone   ON customers(phone)`,
-  `CREATE INDEX IF NOT EXISTS idx_customers_name    ON customers(name)`,
-  `CREATE INDEX IF NOT EXISTS idx_bookings_customer ON bookings(customer_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_bookings_status   ON bookings(status)`,
-  `CREATE INDEX IF NOT EXISTS idx_bookings_date     ON bookings(booking_date)`,
+  `CREATE INDEX IF NOT EXISTS idx_customers_name       ON customers(name)`,
+  `CREATE INDEX IF NOT EXISTS idx_customers_phone      ON customers(phone)`,
+  `CREATE INDEX IF NOT EXISTS idx_customers_cnic       ON customers(cnic)`,
+  `CREATE INDEX IF NOT EXISTS idx_customers_city       ON customers(city_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_customers_cast       ON customers(cast_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_dresses_name         ON dresses(name)`,
+  `CREATE INDEX IF NOT EXISTS idx_dresses_category     ON dresses(category_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_dresses_active       ON dresses(active)`,
+  `CREATE INDEX IF NOT EXISTS idx_bookings_no          ON bookings(booking_no)`,
+  `CREATE INDEX IF NOT EXISTS idx_bookings_customer    ON bookings(customer_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_bookings_status      ON bookings(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_bookings_delivery    ON bookings(delivery_date)`,
+  `CREATE INDEX IF NOT EXISTS idx_bookings_returning   ON bookings(returning_date)`,
   `CREATE INDEX IF NOT EXISTS idx_booking_items_booking ON booking_items(booking_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_booking_items_dress   ON booking_items(dress_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_payments_booking  ON payments(booking_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_audit_logs_user   ON audit_logs(user_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_audit_logs_table  ON audit_logs(table_name, record_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_sync_outbox_status ON sync_outbox(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_booking_items_dress  ON booking_items(dress_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_payments_booking     ON payments(booking_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_audit_logs_user      ON audit_logs(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_audit_logs_table     ON audit_logs(table_name, record_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_sync_outbox_status   ON sync_outbox(status)`,
 ];
 
 module.exports = { SCHEMA_STATEMENTS };

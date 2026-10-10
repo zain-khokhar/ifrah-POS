@@ -3,41 +3,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Truck, RotateCcw, AlertTriangle, CreditCard,
-  ArrowRight, Plus, Clock, TrendingUp,
-  Zap, BarChart2, UserPlus, Shirt, Info,
+  ArrowRight, Plus, Clock, Info,
+  Zap, BarChart2, UserPlus, Shirt,
 } from 'lucide-react';
-
-// ─── Mock data — Phase 0 ────────────────────────────────────────
-const MOCK_STATS = [
-  {
-    label: 'Aaj ki Deliveries',
-    value: 3,
-    sub: '3 customers ko dresses jaayengi',
-    icon: Truck, color: '#3b82f6', bg: '#dbeafe',
-    href: '/deliveries',
-  },
-  {
-    label: 'Aaj ke Returns',
-    value: 2,
-    sub: '2 dresses wapas aangi aaj',
-    icon: RotateCcw, color: '#10b981', bg: '#dcfce7',
-    href: '/returns',
-  },
-  {
-    label: 'Overdue Returns',
-    value: 1,
-    sub: '1 dress abhi tak wapas nahi',
-    icon: AlertTriangle, color: '#ef4444', bg: '#fee2e2',
-    href: '/returns',
-  },
-  {
-    label: 'Unpaid Balance',
-    value: 'Rs. 45,000',
-    sub: '8 bookings ka baqi raqam',
-    icon: CreditCard, color: '#f59e0b', bg: '#fef9c3',
-    href: '/payments',
-  },
-];
 
 const MOCK_BOOKINGS = [
   { id: 'BK-001', customer: 'Ayesha Khan',    dress: 'Red Bridal Lehenga', delivery: '10 Oct', returning: '12 Oct', status: 'pending', amount: 25000 },
@@ -58,15 +26,27 @@ const STATUS_MAP = {
   open:    { cls: 'badge-info',    label: 'Open'    },
   closed:  { cls: 'badge-gray',    label: 'Closed'  },
 };
-// ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [user, setUser]               = useState(() => {
+  const [summary, setSummary] = useState({ deliveries: 0, returns: 0, overdue: 0, pending: 0 });
+  const [user, setUser] = useState(() => {
     if (typeof window === 'undefined') return null;
-    const stored = localStorage.getItem('ifrah_user');
-    return stored ? JSON.parse(stored) : null;
+    try {
+      const stored = localStorage.getItem('ifrah_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
   });
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    async function load() {
+      const res = await window.electronAPI?.bookings.todaySummary();
+      if (res?.ok) setSummary(res.data);
+    }
+    load();
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -87,6 +67,33 @@ export default function DashboardPage() {
   const timeStr = currentTime.toLocaleTimeString('en-PK', {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
+
+  const stats = [
+    {
+      label: 'Aaj ki Deliveries',
+      value: summary.deliveries,
+      sub: `${summary.deliveries} customer${summary.deliveries !== 1 ? 's' : ''} ko dresses jaayengi`,
+      icon: Truck, color: '#3b82f6', bg: '#dbeafe', href: '/deliveries',
+    },
+    {
+      label: 'Aaj ke Returns',
+      value: summary.returns,
+      sub: `${summary.returns} dress${summary.returns !== 1 ? 'es' : ''} wapas aangi aaj`,
+      icon: RotateCcw, color: '#10b981', bg: '#dcfce7', href: '/returns',
+    },
+    {
+      label: 'Overdue Returns',
+      value: summary.overdue,
+      sub: summary.overdue > 0 ? `${summary.overdue} dress abhi tak wapas nahi` : 'Sab clear hai!',
+      icon: AlertTriangle, color: '#ef4444', bg: '#fee2e2', href: '/returns',
+    },
+    {
+      label: 'Pending Payments',
+      value: summary.pending,
+      sub: `${summary.pending} booking${summary.pending !== 1 ? 's' : ''} ka baqi raqam`,
+      icon: CreditCard, color: '#f59e0b', bg: '#fef9c3', href: '/payments',
+    },
+  ];
 
   return (
     <div>
@@ -113,7 +120,7 @@ export default function DashboardPage() {
       <div className="page-body">
         {/* ── Stat Cards ──────────────────────────────────────────── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
-          {MOCK_STATS.map(s => {
+          {stats.map(s => {
             const Icon = s.icon;
             return (
               <Link key={s.label} href={s.href} className="stat-card" style={{ color: 'inherit' }}>
