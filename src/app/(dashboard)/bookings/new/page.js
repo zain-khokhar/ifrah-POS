@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   Save, Printer, Plus, Trash2, ChevronDown, X, Check,
   RefreshCw, AlertCircle, User, Calendar, Package, UserPlus,
+  CreditCard, Ban, CheckCircle, ShieldAlert,
 } from 'lucide-react';
 import { formatPakPhone, cnicMask, validateCustomer } from '@/lib/customerValidation';
 
@@ -758,27 +759,127 @@ export default function NewBookingPage() {
     }
   }
 
-  // Items card
   const [items, setItems] = useState([emptyItem()]);
   const [deliveryWarning, setDeliveryWarning] = useState(false);
 
-  // Discount
+  // Discount & Security Deposit
   const [discount, setDiscount] = useState('');
+  const [securityDeposit, setSecurityDeposit] = useState(0);
+
+  // Edit Mode state
+  const [editBookingId, setEditBookingId] = useState(null);
+  const [existingPayments, setExistingPayments] = useState([]);
+  const [lastEditedBy, setLastEditedBy] = useState('');
+  const [lastEditedTime, setLastEditedTime] = useState('');
+
+  // Advance Payment (for New Booking)
+  const [advanceAmount, setAdvanceAmount] = useState('');
+  const [advanceMethod, setAdvanceMethod] = useState('cash');
+  const [advanceDate,   setAdvanceDate]   = useState(new Date().toISOString().slice(0, 10));
+  const [advanceNote,   setAdvanceNote]   = useState('');
+
+  // Add Payment Modal (for Existing Booking)
+  const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
+  const [newPayAmount,  setNewPayAmount]  = useState('');
+  const [newPayMethod,  setNewPayMethod]  = useState('cash');
+  const [newPayKind,    setNewPayKind]    = useState('rental');
+  const [newPayDate,    setNewPayDate]    = useState(new Date().toISOString().slice(0, 10));
+  const [newPayNote,    setNewPayNote]    = useState('');
+  const [submittingPayment, setSubmittingPayment] = useState(false);
+
+  // Void Payment Modal
+  const [voidTargetPayment, setVoidTargetPayment] = useState(null);
+  const [voidReason,        setVoidReason]        = useState('');
+  const [submittingVoid,    setSubmittingVoid]    = useState(false);
+
+  // Status Close Checklist Modal
+  const [statusCheckModal,  setStatusCheckModal]  = useState(null);
+  const [forceCloseReason,  setForceCloseReason]  = useState('');
+  const [submittingForceClose, setSubmittingForceClose] = useState(false);
 
   // Save state
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState('');
   const [saved,   setSaved]   = useState(false);
 
+  // Reload booking and payments
+  async function reloadBookingData(id) {
+    const res = await window.electronAPI?.bookings.get(id);
+    if (res?.ok && res.data) {
+      const b = res.data;
+      setBookingNo(b.booking_no);
+      setStatus(b.status || 'None');
+      setCityId(b.city_id || '');
+      setBookingDate(b.booking_date || '');
+      setDeliveryDate(b.delivery_date || '');
+      setReturningDate(b.returning_date || '');
+      setNotes(b.notes || '');
+      setDiscount(b.discount ? String(b.discount) : '');
+      setSecurityDeposit(b.security_deposit || 0);
+      setExistingPayments(b.payments || []);
+      setLastEditedBy(b.updated_by_name || b.created_by_name || '');
+      setLastEditedTime(b.updated_at || b.created_at || '');
+    }
+  }
+
   // Load initial data
   useEffect(() => {
     async function init() {
-      const [session, nextNo] = await Promise.all([
-        window.electronAPI?.auth.session(),
-        window.electronAPI?.bookings.nextNo(),
-      ]);
+      const session = await window.electronAPI?.auth.session();
       if (session?.ok) { setUserRole(session.user.role); }
-      if (nextNo?.ok) setBookingNo(nextNo.booking_no);
+
+      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const idParam = params ? params.get('id') : null;
+
+      if (idParam) {
+        setEditBookingId(idParam);
+        const res = await window.electronAPI?.bookings.get(idParam);
+        if (res?.ok && res.data) {
+          const b = res.data;
+          setBookingNo(b.booking_no);
+          setStatus(b.status || 'None');
+          setCityId(b.city_id || '');
+          setBookingDate(b.booking_date || '');
+          setDeliveryDate(b.delivery_date || '');
+          setReturningDate(b.returning_date || '');
+          setNotes(b.notes || '');
+          setDiscount(b.discount ? String(b.discount) : '');
+          setSecurityDeposit(b.security_deposit || 0);
+          setCustomer({
+            id: b.customer_id,
+            name: b.customer_name,
+            phone: b.customer_phone,
+            phone2: b.customer_phone2,
+            cnic: b.customer_cnic,
+            address: b.customer_address,
+            relative_name: b.relative_name,
+            relative_phone: b.relative_phone,
+            relative_cnic: b.relative_cnic,
+          });
+          if (b.items && b.items.length > 0) {
+            setItems(b.items.map(it => ({
+              _key: String(it.id || Math.random()),
+              dress_id: it.dress_id,
+              dress_name_snapshot: it.dress_name_snapshot,
+              size: it.size || '',
+              quantity: it.quantity || 1,
+              rate: it.rate || 0,
+              description: it.description || '',
+              jewellery: Boolean(it.jewellery),
+              clutch_purse: Boolean(it.clutch_purse),
+              hand_bag: Boolean(it.hand_bag),
+              double_dupatta: Boolean(it.double_dupatta),
+              shoes: Boolean(it.shoes),
+            })));
+          }
+          setExistingPayments(b.payments || []);
+          setLastEditedBy(b.updated_by_name || b.created_by_name || '');
+          setLastEditedTime(b.updated_at || b.created_at || '');
+        }
+      } else {
+        const nextNo = await window.electronAPI?.bookings.nextNo();
+        if (nextNo?.ok) setBookingNo(nextNo.booking_no);
+      }
     }
     init();
   }, []);
@@ -788,6 +889,13 @@ export default function NewBookingPage() {
     return sum + (parseInt(it.quantity || 1, 10) * parseInt(it.rate || 0, 10));
   }, 0) - parseInt(discount || 0, 10);
   const grandTotalSafe = Math.max(0, grandTotal);
+
+  const totalPaid = editBookingId
+    ? existingPayments.filter(p => p.kind === 'rental' && p.is_void === 0).reduce((s, p) => s + (p.amount || 0), 0)
+    : Math.max(0, parseInt(advanceAmount || 0, 10));
+
+  const remainingBalance = Math.max(0, grandTotalSafe - totalPaid);
+  const overpaidAmount   = totalPaid > grandTotalSafe ? totalPaid - grandTotalSafe : 0;
 
   // Item helpers
   function setItem(key, field, val) {
@@ -823,10 +931,125 @@ export default function NewBookingPage() {
   }
 
   const isViewer = userRole === 'viewer';
+  const isOwner  = userRole === 'owner';
 
-  // Draft auto-save to localStorage
+  // Handle Status change with Closed checklist check
+  async function handleStatusSelect(newStatus) {
+    if (newStatus === status) return;
+    if (newStatus === 'Closed') {
+      if (editBookingId) {
+        const check = await window.electronAPI?.bookings.canClose(editBookingId);
+        if (check?.ok && !check.data?.canClose) {
+          setStatusCheckModal(check.data);
+          return;
+        }
+      } else {
+        // New booking cannot be closed on creation unless fully completed
+        if (!deliveryDate || !returningDate || remainingBalance > 0) {
+          setStatusCheckModal({
+            canClose: false,
+            checklist: {
+              delivered: Boolean(deliveryDate),
+              returned: Boolean(returningDate),
+              fullyPaid: remainingBalance === 0,
+            },
+            missing: [
+              !deliveryDate && 'Dresses deliver nahi hui (Delivered mark hona baqi hai)',
+              !returningDate && 'Dresses wapis nahi aayi (Returned mark hona baqi hai)',
+              remainingBalance > 0 && `Baqaya raqam Rs. ${remainingBalance.toLocaleString()} rehti hai`,
+            ].filter(Boolean),
+          });
+          return;
+        }
+      }
+    }
+    setStatus(newStatus);
+  }
+
+  // Handle Adding a payment in edit mode
+  async function handleCreatePaymentSubmit() {
+    if (submittingPayment) return;
+    const amt = parseInt(newPayAmount, 10);
+    if (!amt || isNaN(amt) || amt <= 0) {
+      alert('Raqam 0 se zyada honi chahiye.');
+      return;
+    }
+    setSubmittingPayment(true);
+    try {
+      const res = await window.electronAPI?.payments.create({
+        booking_id: editBookingId,
+        amount: amt,
+        payment_method: newPayMethod,
+        kind: newPayKind,
+        paid_on: newPayDate,
+        note: newPayNote,
+      });
+      if (res?.ok) {
+        await reloadBookingData(editBookingId);
+        setShowAddPaymentModal(false);
+        setNewPayAmount('');
+        setNewPayNote('');
+      } else {
+        alert(res?.message || 'Payment save nahi ho saki.');
+      }
+    } catch (err) {
+      alert(err.message || 'Error occurred.');
+    } finally {
+      setSubmittingPayment(false);
+    }
+  }
+
+  // Handle Void Payment (Owner only)
+  async function handleConfirmVoid() {
+    if (submittingVoid || !voidTargetPayment) return;
+    setSubmittingVoid(true);
+    try {
+      const res = await window.electronAPI?.payments.void(voidTargetPayment.id, voidReason || 'Voided by owner');
+      if (res?.ok) {
+        await reloadBookingData(editBookingId);
+        setVoidTargetPayment(null);
+        setVoidReason('');
+      } else {
+        alert(res?.message || 'Payment void nahi ho saki.');
+      }
+    } catch (err) {
+      alert(err.message || 'Error occurred.');
+    } finally {
+      setSubmittingVoid(false);
+    }
+  }
+
+  // Handle Force Close (Owner override)
+  async function handleConfirmForceClose() {
+    if (submittingForceClose || !editBookingId) return;
+    if (!forceCloseReason.trim()) {
+      alert('Force close karne ke liye reason likhna zaroori hai.');
+      return;
+    }
+    setSubmittingForceClose(true);
+    try {
+      const res = await window.electronAPI?.bookings.setStatus(editBookingId, 'Closed', {
+        forceClose: true,
+        forceReason: forceCloseReason.trim(),
+      });
+      if (res?.ok) {
+        setStatus('Closed');
+        setStatusCheckModal(null);
+        setForceCloseReason('');
+        await reloadBookingData(editBookingId);
+      } else {
+        alert(res?.message || 'Status update failed.');
+      }
+    } catch (err) {
+      alert(err.message || 'Error occurred.');
+    } finally {
+      setSubmittingForceClose(false);
+    }
+  }
+
+  // Draft auto-save to localStorage (only in new booking mode)
   const [hasDraft, setHasDraft] = useState(() => {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === 'undefined' || editBookingId) return false;
     try {
       const savedDraft = localStorage.getItem('ifrah_booking_draft');
       if (savedDraft) {
@@ -862,7 +1085,7 @@ export default function NewBookingPage() {
   }
 
   useEffect(() => {
-    if (saved) return;
+    if (saved || editBookingId) return;
     const t = setTimeout(() => {
       try {
         localStorage.setItem('ifrah_booking_draft', JSON.stringify({
@@ -872,7 +1095,7 @@ export default function NewBookingPage() {
       } catch {}
     }, 1000);
     return () => clearTimeout(t);
-  }, [status, cityId, bookingDate, deliveryDate, returningDate, notes, customer, items, discount, saved]);
+  }, [status, cityId, bookingDate, deliveryDate, returningDate, notes, customer, items, discount, saved, editBookingId]);
 
   async function handleSave() {
     if (saving || saved || isViewer) return;
@@ -911,11 +1134,23 @@ export default function NewBookingPage() {
           })),
       };
 
-      const res = await window.electronAPI?.bookings.create(payload);
-      if (!res?.ok) { setError(res?.message || 'Save failed.'); return; }
-      try { localStorage.removeItem('ifrah_booking_draft'); } catch {}
-      setSaved(true);
-      setTimeout(() => router.push('/bookings'), 800);
+      if (editBookingId) {
+        const res = await window.electronAPI?.bookings.update(editBookingId, payload);
+        if (!res?.ok) { setError(res?.message || 'Update failed.'); return; }
+        setSaved(true);
+        setTimeout(() => router.push('/bookings'), 800);
+      } else {
+        payload.advance_amount = parseInt(advanceAmount || 0, 10);
+        payload.advance_method = advanceMethod;
+        payload.advance_date   = advanceDate;
+        payload.advance_note   = advanceNote;
+
+        const res = await window.electronAPI?.bookings.create(payload);
+        if (!res?.ok) { setError(res?.message || 'Save failed.'); return; }
+        try { localStorage.removeItem('ifrah_booking_draft'); } catch {}
+        setSaved(true);
+        setTimeout(() => router.push('/bookings'), 800);
+      }
     } catch (e) {
       setError(e.message || 'Something went wrong.');
     } finally {
@@ -942,13 +1177,20 @@ export default function NewBookingPage() {
       {/* Page Header */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">New Booking</h1>
-          <p className="page-subtitle" style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, color: '#7c3aed' }}>
-            #{bookingNo}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 className="page-title">{editBookingId ? 'Edit Booking' : 'New Booking'}</h1>
+            <span style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 900, color: '#7c3aed' }}>
+              #{bookingNo}
+            </span>
+          </div>
+          <p className="page-subtitle" style={{ fontSize: 12.5, color: '#64748b' }}>
+            {editBookingId
+              ? (lastEditedBy ? `Last edited by ${lastEditedBy} ${lastEditedTime ? `(${new Date(lastEditedTime).toLocaleDateString()})` : ''}` : 'Booking record update karein')
+              : 'Nayi dress rental booking register karein'}
           </p>
         </div>
         <Link href="/bookings" className="btn btn-secondary">
-          <X size={14} /> Cancel
+          <X size={14} /> Close
         </Link>
       </div>
 
@@ -985,8 +1227,18 @@ export default function NewBookingPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
               {/* Status */}
               <div>
-                <label style={labelStyle}>Status</label>
-                <select className="form-input form-select" value={status} onChange={e => setStatus(e.target.value)} disabled={isViewer}>
+                <label style={labelStyle}>
+                  Status
+                  <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4, fontWeight: 400 }} title="Closed ke liye delivered, returned aur remaining Rs. 0 hona zaroori hai.">
+                    ⓘ
+                  </span>
+                </label>
+                <select
+                  className="form-input form-select"
+                  value={status}
+                  onChange={e => handleStatusSelect(e.target.value)}
+                  disabled={isViewer}
+                >
                   {['None','Open','Pending','Closed'].map(s =>
                     <option key={s} value={s}>{s}</option>
                   )}
@@ -1161,6 +1413,189 @@ export default function NewBookingPage() {
           </div>
         </div>
 
+        {/* ── CARD 4: Payments & Hisab Kitab ────────────────────────── */}
+        <div style={cardStyle}>
+          <div style={cardHdr}>
+            <CreditCard size={16} color="#7c3aed" />
+            <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>
+              Payments &amp; Hisab Kitab
+            </span>
+            <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700 }}>
+              {remainingBalance === 0 && grandTotalSafe > 0 ? (
+                <span style={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <CheckCircle size={13} /> Fully Paid
+                </span>
+              ) : remainingBalance > 0 ? (
+                <span style={{ color: '#d97706' }}>
+                  Remaining: Rs. {remainingBalance.toLocaleString()}
+                </span>
+              ) : (
+                <span style={{ color: '#64748b' }}>Rs. 0</span>
+              )}
+            </span>
+          </div>
+
+          <div style={{ padding: '16px' }}>
+            {!editBookingId ? (
+              /* New Booking: Advance Payment Form */
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 10 }}>
+                  Advance Payment (optional)
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '150px 150px 150px 1fr', gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>Advance Amount (Rs.)</label>
+                    <input
+                      className="form-input"
+                      type="number"
+                      min={0}
+                      value={advanceAmount}
+                      onChange={e => setAdvanceAmount(e.target.value)}
+                      placeholder="0"
+                      style={{ fontWeight: 700 }}
+                      disabled={isViewer}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Payment Method</label>
+                    <select
+                      className="form-input form-select"
+                      value={advanceMethod}
+                      onChange={e => setAdvanceMethod(e.target.value)}
+                      disabled={isViewer}
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="bank">Bank</option>
+                      <option value="wallet">Wallet</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Payment Date</label>
+                    <DateInput
+                      value={advanceDate}
+                      onChange={setAdvanceDate}
+                      disabled={isViewer}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Note / Details</label>
+                    <input
+                      className="form-input"
+                      value={advanceNote}
+                      onChange={e => setAdvanceNote(e.target.value)}
+                      placeholder="e.g. Advance cash received"
+                      disabled={isViewer}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
+                  💡 Pehli payment Advance ke tor par darj hogi aur booking bante hi auto deduct ho jayegi.
+                </div>
+              </div>
+            ) : (
+              /* Existing Booking: Payment History Ledger Table + Add Payment */
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+                    Payment History ({existingPayments.length} records)
+                  </div>
+                  {!isViewer && (
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => {
+                        setNewPayAmount(remainingBalance > 0 ? String(remainingBalance) : '');
+                        setShowAddPaymentModal(true);
+                      }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                    >
+                      <Plus size={12} /> Nayi Payment Record Karein
+                    </button>
+                  )}
+                </div>
+
+                {existingPayments.length === 0 ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13, background: '#f8fafc', borderRadius: 8 }}>
+                    Abhi koi payment darj nahi hui. Nayi payment add karne ke liye upar button dabayein.
+                  </div>
+                ) : (
+                  <table className="data-table" style={{ fontSize: 12.5 }}>
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Date</th>
+                        <th>Method</th>
+                        <th>Kind</th>
+                        <th>Received By</th>
+                        <th>Note</th>
+                        <th style={{ textAlign: 'right' }}>Amount</th>
+                        <th style={{ textAlign: 'center' }}>Status</th>
+                        {isOwner && <th>Action</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {existingPayments.map((p, idx) => {
+                        const isVoid = p.is_void === 1;
+                        return (
+                          <tr key={p.id || idx} style={{ opacity: isVoid ? 0.6 : 1, background: isVoid ? '#fef2f2' : undefined }}>
+                            <td style={{ fontFamily: 'monospace', color: '#94a3b8' }}>#{idx + 1}</td>
+                            <td>{p.paid_on}</td>
+                            <td>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                                background: p.payment_method === 'cash' ? '#dcfce7' : p.payment_method === 'bank' ? '#dbeafe' : '#fef3c7',
+                                color: p.payment_method === 'cash' ? '#16a34a' : p.payment_method === 'bank' ? '#1d4ed8' : '#d97706',
+                                textTransform: 'capitalize',
+                              }}>
+                                {p.payment_method}
+                              </span>
+                            </td>
+                            <td>
+                              <span style={{ fontSize: 11, textTransform: 'uppercase', fontWeight: 700, color: p.kind === 'deposit' ? '#7c3aed' : '#475569' }}>
+                                {p.kind}
+                              </span>
+                            </td>
+                            <td>{p.received_by_name || 'Staff'}</td>
+                            <td style={{ color: '#64748b' }}>{p.note || '—'}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 800, color: isVoid ? '#94a3b8' : '#10b981', textDecoration: isVoid ? 'line-through' : 'none' }}>
+                              Rs. {Number(p.amount || 0).toLocaleString()}
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              {isVoid ? (
+                                <span style={{ background: '#fee2e2', color: '#dc2626', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 800 }} title={p.void_reason}>
+                                  Voided
+                                </span>
+                              ) : (
+                                <span style={{ background: '#dcfce7', color: '#16a34a', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 800 }}>
+                                  Active ✓
+                                </span>
+                              )}
+                            </td>
+                            {isOwner && (
+                              <td>
+                                {!isVoid && (
+                                  <button
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ fontSize: 10.5, padding: '2px 6px', color: '#dc2626' }}
+                                    onClick={() => { setVoidTargetPayment(p); setVoidReason(''); }}
+                                  >
+                                    <Ban size={10} /> Void
+                                  </button>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {error && (
           <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 14px', color: '#dc2626', fontSize: 13, marginBottom: 12 }}>
             {error}
@@ -1176,19 +1611,31 @@ export default function NewBookingPage() {
         boxShadow: '0 -4px 20px rgba(0,0,0,0.08)', zIndex: 50,
       }}>
         {/* Totals */}
-        <div style={{ display: 'flex', gap: 24, flex: 1 }}>
-          <div style={{ textAlign: 'center' }}>
+        <div style={{ display: 'flex', gap: 24, flex: 1, alignItems: 'center' }}>
+          <div>
             <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6 }}>Grand Total</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>Rs. {grandTotalSafe.toLocaleString()}</div>
           </div>
-          <div style={{ textAlign: 'center' }}>
+          <div>
             <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6 }}>Paid</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: '#10b981' }}>Rs. 0</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: '#10b981' }}>Rs. {totalPaid.toLocaleString()}</div>
           </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6 }}>Remaining</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: grandTotalSafe > 0 ? '#ef4444' : '#10b981' }}>
-              Rs. {grandTotalSafe.toLocaleString()}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6, display: 'flex', alignItems: 'center', gap: 4 }}>
+              Remaining
+              {remainingBalance === 0 && grandTotalSafe > 0 && (
+                <span style={{ fontSize: 9.5, background: '#dcfce7', color: '#16a34a', padding: '1px 5px', borderRadius: 10, fontWeight: 800 }}>
+                  Fully Paid
+                </span>
+              )}
+              {overpaidAmount > 0 && (
+                <span style={{ fontSize: 9.5, background: '#fee2e2', color: '#dc2626', padding: '1px 5px', borderRadius: 10, fontWeight: 800 }}>
+                  Overpaid (+{overpaidAmount})
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: remainingBalance > 0 ? '#ef4444' : '#10b981' }}>
+              Rs. {remainingBalance.toLocaleString()}
             </div>
           </div>
         </div>
@@ -1215,6 +1662,241 @@ export default function NewBookingPage() {
           </div>
         )}
       </div>
+
+      {/* ── STATUS CHECKLIST MODAL (When attempting Closed without meeting criteria) ── */}
+      {statusCheckModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16,
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 14, maxWidth: 500, width: '100%',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.25)', overflow: 'hidden',
+          }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <ShieldAlert size={20} color="#f59e0b" />
+              <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>
+                Booking Close Karne Ki Sharaait Poori Nahi Hain
+              </div>
+            </div>
+            <div style={{ padding: '20px' }}>
+              <div style={{ fontSize: 13, color: '#475569', marginBottom: 16, lineHeight: 1.5 }}>
+                System ke rule ke mutabiq booking sirf tab <strong>Closed</strong> ho sakti hai jab ye teeno sharaait poori hon:
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8,
+                  background: statusCheckModal.checklist?.delivered ? '#f0fdf4' : '#fffbeb',
+                  border: `1px solid ${statusCheckModal.checklist?.delivered ? '#bbf7d0' : '#fef3c7'}`,
+                }}>
+                  {statusCheckModal.checklist?.delivered ? <CheckCircle size={16} color="#16a34a" /> : <AlertCircle size={16} color="#d97706" />}
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
+                    1. Dresses Delivered Mark Ho Chuki Hon
+                  </span>
+                </div>
+
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8,
+                  background: statusCheckModal.checklist?.returned ? '#f0fdf4' : '#fffbeb',
+                  border: `1px solid ${statusCheckModal.checklist?.returned ? '#bbf7d0' : '#fef3c7'}`,
+                }}>
+                  {statusCheckModal.checklist?.returned ? <CheckCircle size={16} color="#16a34a" /> : <AlertCircle size={16} color="#d97706" />}
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
+                    2. Dresses Returned Mark Ho Chuki Hon
+                  </span>
+                </div>
+
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8,
+                  background: statusCheckModal.checklist?.fullyPaid ? '#f0fdf4' : '#fef2f2',
+                  border: `1px solid ${statusCheckModal.checklist?.fullyPaid ? '#bbf7d0' : '#fecaca'}`,
+                }}>
+                  {statusCheckModal.checklist?.fullyPaid ? <CheckCircle size={16} color="#16a34a" /> : <AlertCircle size={16} color="#dc2626" />}
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
+                    3. Baqaya Balance Rs. 0 (Fully Paid) Ho
+                  </span>
+                </div>
+              </div>
+
+              {/* Owner force close option */}
+              {isOwner && editBookingId && (
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, marginBottom: 14 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>
+                    Owner Override (Force Close):
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+                    Khas halat mein owner booking force-close kar sakta hai. Wajah likhna lazmi hai:
+                  </div>
+                  <input
+                    className="form-input"
+                    placeholder="Force close karne ki wajah likhein..."
+                    value={forceCloseReason}
+                    onChange={e => setForceCloseReason(e.target.value)}
+                    style={{ fontSize: 12.5 }}
+                  />
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleConfirmForceClose}
+                    disabled={submittingForceClose || !forceCloseReason.trim()}
+                    style={{ marginTop: 8, width: '100%', color: '#d97706', borderColor: '#fde68a' }}
+                  >
+                    {submittingForceClose ? 'Updating...' : 'Force Close Booking (Owner Only)'}
+                  </button>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button className="btn btn-secondary" onClick={() => setStatusCheckModal(null)}>
+                  Samjh Gaya (Revert Status)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADD PAYMENT MODAL (for existing booking) ── */}
+      {showAddPaymentModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16,
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 14, maxWidth: 440, width: '100%',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.25)', overflow: 'hidden',
+          }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>
+                Payment Record Karein
+              </div>
+              <X size={16} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => setShowAddPaymentModal(false)} />
+            </div>
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={labelStyle}>Raqam (Rs.)</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  min={1}
+                  value={newPayAmount}
+                  onChange={e => setNewPayAmount(e.target.value)}
+                  placeholder="Payment amount..."
+                  style={{ fontSize: 15, fontWeight: 800 }}
+                  autoFocus
+                />
+                <span style={{ fontSize: 11, color: '#64748b' }}>
+                  Remaining balance: Rs. {remainingBalance.toLocaleString()}
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={labelStyle}>Payment Method</label>
+                  <select
+                    className="form-input form-select"
+                    value={newPayMethod}
+                    onChange={e => setNewPayMethod(e.target.value)}
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="bank">Bank Transfer</option>
+                    <option value="wallet">Mobile Wallet</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Kind</label>
+                  <select
+                    className="form-input form-select"
+                    value={newPayKind}
+                    onChange={e => setNewPayKind(e.target.value)}
+                  >
+                    <option value="rental">Rental (Rent Payment)</option>
+                    <option value="deposit">Deposit (Security)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Payment Date</label>
+                <DateInput value={newPayDate} onChange={setNewPayDate} />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Note (optional)</label>
+                <input
+                  className="form-input"
+                  value={newPayNote}
+                  onChange={e => setNewPayNote(e.target.value)}
+                  placeholder="e.g. Baqaya balance receive hua"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button className="btn btn-secondary" onClick={() => setShowAddPaymentModal(false)}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleCreatePaymentSubmit}
+                  disabled={submittingPayment}
+                >
+                  {submittingPayment ? 'Saving...' : 'Payment Save Karein'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── VOID PAYMENT MODAL (Owner only) ── */}
+      {voidTargetPayment && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16,
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 14, maxWidth: 420, width: '100%',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.25)', overflow: 'hidden',
+          }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Ban size={18} color="#dc2626" />
+              <div style={{ fontWeight: 800, fontSize: 15, color: '#dc2626' }}>
+                Payment Void Karein
+              </div>
+            </div>
+            <div style={{ padding: '20px' }}>
+              <div style={{ fontSize: 13, color: '#475569', marginBottom: 12 }}>
+                Kya aap waqai Payment <strong>#{voidTargetPayment.id}</strong> (Rs. {Number(voidTargetPayment.amount || 0).toLocaleString()}) ko void karna chahte hain?
+                Is se remaining balance dubara adjust ho jayega.
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label style={labelStyle}>Void Karne Ki Wajah (Required)</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. Ghalat amount darj hui thi..."
+                  value={voidReason}
+                  onChange={e => setVoidReason(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button className="btn btn-secondary" onClick={() => setVoidTargetPayment(null)}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-danger"
+                  onClick={handleConfirmVoid}
+                  disabled={submittingVoid || !voidReason.trim()}
+                  style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, padding: '7px 14px', fontWeight: 700 }}
+                >
+                  {submittingVoid ? 'Voiding...' : 'Yes, Void Payment'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

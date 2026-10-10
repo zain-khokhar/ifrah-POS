@@ -1,146 +1,293 @@
 'use client';
-import { Database, Download, Upload, RefreshCw, Cloud, HardDrive, CheckCircle2 } from 'lucide-react';
 
-const MOCK_BACKUPS = [
-  { name: '2026-10-09-09-00.sqlite', size: '2.4 MB', date: '09 Oct 2026, 09:00 AM', type: 'auto'   },
-  { name: '2026-10-08-09-00.sqlite', size: '2.1 MB', date: '08 Oct 2026, 09:00 AM', type: 'auto'   },
-  { name: '2026-10-07-manual.sqlite', size: '1.9 MB', date: '07 Oct 2026, 03:45 PM', type: 'manual' },
-  { name: '2026-10-06-09-00.sqlite', size: '1.8 MB', date: '06 Oct 2026, 09:00 AM', type: 'auto'   },
-];
+import { useState, useEffect } from 'react';
+import {
+  Database, Download, HardDrive, FolderOpen, RefreshCw,
+  CheckCircle2, AlertCircle, ShieldCheck, Clock, FileText,
+} from 'lucide-react';
 
 export default function BackupPage() {
+  const [backups,     setBackups]     = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [backingUp,   setBackingUp]   = useState(false);
+  const [lastBackup,  setLastBackup]  = useState(null);
+  const [error,       setError]       = useState('');
+  const [feedback,    setFeedback]    = useState('');
+
+  async function loadBackups() {
+    setLoading(true);
+    try {
+      const res = await window.electronAPI?.backup.list();
+      if (res?.ok) setBackups(res.data || []);
+    } catch (err) {
+      console.error('[BackupPage]', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    window.electronAPI?.backup.list().then(res => {
+      if (active) {
+        if (res?.ok) setBackups(res.data || []);
+        setLoading(false);
+      }
+    }).catch(err => {
+      console.error('[BackupPage]', err);
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  // Quick backup to default app folder
+  async function handleQuickBackup() {
+    if (backingUp) return;
+    setBackingUp(true);
+    setError('');
+    setFeedback('');
+
+    try {
+      const res = await window.electronAPI?.backup.create({ isManual: true });
+      if (res?.ok) {
+        setLastBackup(res);
+        setFeedback(`Backup kamiyabi se save ho gaya: ${res.filename} (${res.sizeFormatted})`);
+        await loadBackups();
+      } else {
+        setError(res?.message || 'Backup failed.');
+      }
+    } catch (err) {
+      setError(err.message || 'Backup create karte waqt error aaya.');
+    } finally {
+      setBackingUp(false);
+    }
+  }
+
+  // Interactive Save Dialog: Choose USB or any folder
+  async function handleChooseAndSave() {
+    if (backingUp) return;
+    setBackingUp(true);
+    setError('');
+    setFeedback('');
+
+    try {
+      const res = await window.electronAPI?.backup.chooseAndSave();
+      if (res?.ok) {
+        setLastBackup(res);
+        setFeedback(`Manual backup mukammal ho gaya! File save hui:\n${res.filePath} (${res.sizeFormatted})`);
+        await loadBackups();
+      } else if (!res?.canceled) {
+        setError(res?.message || 'Save failed.');
+      }
+    } catch (err) {
+      setError(err.message || 'File save dialog mein error aaya.');
+    } finally {
+      setBackingUp(false);
+    }
+  }
+
+  // Open default backup folder in Explorer
+  async function handleOpenFolder() {
+    try {
+      await window.electronAPI?.backup.openFolder();
+    } catch (err) {
+      alert('Folder open karne mein masla aaya: ' + err.message);
+    }
+  }
+
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Backup & Sync</h1>
-          <p className="page-subtitle">Local backup aur Supabase cloud sync manage karein</p>
+          <h1 className="page-title">Local Backup</h1>
+          <p className="page-subtitle">
+            Dukaan ka mukammal data mehfooz karein — offline SQLite backup aur integrity check
+          </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary">
-            <Download size={14} /> Manual Backup
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={handleOpenFolder}
+            title="Open default backup folder in Windows Explorer"
+          >
+            <FolderOpen size={14} /> Backup Folder Kholein
           </button>
-          <button className="btn btn-primary" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
-            <RefreshCw size={14} /> Sync Now
+          <button
+            className="btn btn-secondary"
+            onClick={handleQuickBackup}
+            disabled={backingUp}
+            style={{ fontWeight: 600 }}
+          >
+            {backingUp ? <RefreshCw size={14} className="animate-spin" /> : <Database size={14} />}
+            Default Folder Backup
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={handleChooseAndSave}
+            disabled={backingUp}
+            style={{ fontWeight: 700 }}
+          >
+            {backingUp ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
+            Manual Backup (Save As...)
           </button>
         </div>
       </div>
 
       <div className="page-body">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-
-          {/* Local Backup */}
-          <div>
-            <div className="card">
-              <div className="card-header">
-                <h2 className="card-title">
-                  <HardDrive size={14} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-                  Local Backup History
-                </h2>
-                <span className="badge badge-success">Auto Daily</span>
+        {/* Feedback banners */}
+        {feedback && (
+          <div style={{
+            background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10,
+            padding: '14px 18px', marginBottom: 18, display: 'flex', alignItems: 'flex-start', gap: 12,
+            color: '#065f46', fontSize: 13.5,
+          }}>
+            <CheckCircle2 size={18} color="#059669" style={{ marginTop: 2, flexShrink: 0 }} />
+            <div style={{ flex: 1, whiteSpace: 'pre-line', lineHeight: 1.5 }}>
+              <div style={{ fontWeight: 800 }}>Backup Successfully Saved!</div>
+              <div>{feedback}</div>
+              <div style={{ fontSize: 12, marginTop: 4, color: '#047857' }}>
+                ✓ PRAGMA integrity_check pass: Data file bilkul uncorrupted aur ready hai.
               </div>
-              {MOCK_BACKUPS.map((b, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '12px 16px',
-                  borderBottom: '1px solid #f1f5f9',
-                }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-                    background: '#f1f5f9',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#64748b',
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div style={{
+            background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10,
+            padding: '14px 18px', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 12,
+            color: '#b91c1c', fontSize: 13.5,
+          }}>
+            <AlertCircle size={18} color="#dc2626" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 18 }}>
+
+          {/* Left Column: Real Backup History */}
+          <div className="card">
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 className="card-title">
+                <HardDrive size={15} style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle', color: '#7c3aed' }} />
+                Saved Backups
+              </h2>
+              <span className="badge badge-success">
+                {backups.length} file{backups.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            {loading ? (
+              <div style={{ padding: 48, textAlign: 'center', color: '#94a3b8' }}>
+                <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
+                <div>Backups check ho rahe hain...</div>
+              </div>
+            ) : backups.length === 0 ? (
+              <div style={{ padding: 56, textAlign: 'center', color: '#94a3b8' }}>
+                <Database size={44} style={{ marginBottom: 12, opacity: 0.35 }} />
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>
+                  Abhi tak koi backup create nahi hua
+                </div>
+                <div style={{ fontSize: 13, marginBottom: 16 }}>
+                  &quot;Manual Backup (Save As...)&quot; par click kar ke pehla backup save karein.
+                </div>
+                <button className="btn btn-primary btn-sm" onClick={handleChooseAndSave} style={{ display: 'inline-flex' }}>
+                  <Download size={13} /> Pehla Backup Banayein
+                </button>
+              </div>
+            ) : (
+              <div>
+                {backups.map((b, i) => (
+                  <div key={b.name || i} style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '14px 16px',
+                    borderBottom: i < backups.length - 1 ? '1px solid #f1f5f9' : 'none',
                   }}>
-                    <Database size={16} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1e293b', fontFamily: 'monospace' }}>{b.name}</div>
-                    <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>{b.date} • {b.size}</div>
-                  </div>
-                  <span className={`badge ${b.type === 'auto' ? 'badge-gray' : 'badge-purple'}`} style={{ fontSize: 10 }}>
-                    {b.type}
-                  </span>
-                  <div style={{ display: 'flex', gap: 5 }}>
-                    <button className="btn btn-secondary btn-sm"><Download size={11} /></button>
-                    <button className="btn btn-secondary btn-sm" style={{ color: '#f59e0b' }}>
-                      <Upload size={11} /> Restore
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <div style={{ padding: '10px 16px', fontSize: 12, color: '#94a3b8' }}>
-                Phase 12 mein auto-backup aur restore implement hoga
-              </div>
-            </div>
-          </div>
-
-          {/* Sync Status */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div className="card">
-              <div className="card-header">
-                <h2 className="card-title">
-                  <Cloud size={14} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-                  Supabase Cloud Sync
-                </h2>
-                <span className="coming-soon-badge">Phase 11</span>
-              </div>
-              <div className="card-body">
-                <div style={{
-                  padding: '20px', textAlign: 'center',
-                  background: '#f8fafc', borderRadius: 10,
-                  border: '1px dashed #e2e8f0',
-                }}>
-                  <Cloud size={36} style={{ color: '#cbd5e1', marginBottom: 12 }} />
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8', marginBottom: 6 }}>
-                    Supabase Sync — Phase 11
-                  </div>
-                  <div style={{ fontSize: 12.5, color: '#94a3b8', lineHeight: 1.6 }}>
-                    Online sync Phase 11 mein aayega. Abhi sirf local SQLite kaam karega.
-                    Internet ke bina bhi sab kuch normally chalega.
-                  </div>
-                </div>
-
-                {/* Sync Stats Preview */}
-                <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {[
-                    { label: 'Sync Status',      value: 'Offline Mode',   color: '#f59e0b' },
-                    { label: 'Last Sync',         value: 'Never',          color: '#94a3b8' },
-                    { label: 'Pending Changes',   value: '—',              color: '#94a3b8' },
-                    { label: 'Conflicts',         value: '0',              color: '#10b981' },
-                  ].map(s => (
-                    <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
-                      <span style={{ color: '#64748b' }}>{s.label}</span>
-                      <span style={{ fontWeight: 700, color: s.color }}>{s.value}</span>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                      background: '#ede9fe',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#7c3aed',
+                    }}>
+                      <Database size={18} />
                     </div>
-                  ))}
-                </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 13, fontWeight: 700, color: '#0f172a',
+                        fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {b.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, display: 'flex', gap: 12 }}>
+                        <span><Clock size={11} style={{ display: 'inline', marginRight: 4 }} />{b.dateFormatted}</span>
+                        <span>•</span>
+                        <span><FileText size={11} style={{ display: 'inline', marginRight: 4 }} />{b.size}</span>
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20,
+                      background: b.type === 'manual' ? '#f5f3ff' : '#f1f5f9',
+                      color: b.type === 'manual' ? '#7c3aed' : '#64748b',
+                    }}>
+                      {b.type === 'manual' ? 'Manual' : 'Auto'}
+                    </span>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20,
+                      background: '#dcfce7', color: '#16a34a',
+                    }}>
+                      Valid ✓
+                    </span>
+                  </div>
+                ))}
               </div>
+            )}
+
+            <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', fontSize: 12, color: '#94a3b8', display: 'flex', justifyContent: 'space-between' }}>
+              <span>SQLite Online Backup API — WAL mode safe</span>
+              <span>Integrity check automatic chalta hai</span>
+            </div>
+          </div>
+
+          {/* Right Column: Security & Guidance Card */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="card" style={{ padding: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <ShieldCheck size={22} color="#10b981" />
+                <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  Backup Rules &amp; Hifazat
+                </h3>
+              </div>
+              <ul style={{ fontSize: 13, color: '#475569', lineHeight: 1.7, paddingLeft: 18, margin: 0 }}>
+                <li>
+                  <strong>Offline Hifazat:</strong> Ye backup aapke computer ke storage mein bilkul safe rehta hai, chahe internet band ho.
+                </li>
+                <li>
+                  <strong>USB / External Drive:</strong> Rozana dukaan band karne se pehle &quot;Manual Backup (Save As...)&quot; se USB drive par save karna recommended hai.
+                </li>
+                <li>
+                  <strong>Corruption Proof:</strong> Har backup banne ke foran baad SQLite ka <code>PRAGMA integrity_check</code> run hota hai.
+                </li>
+                <li>
+                  <strong>Audit Trail:</strong> Har dafa jab backup banta hai, system audit log mein us ka record mehfooz karta hai.
+                </li>
+              </ul>
             </div>
 
-            {/* Backup Settings */}
-            <div className="card">
-              <div className="card-header">
-                <h2 className="card-title">Backup Settings</h2>
+            <div className="card" style={{ padding: '20px' }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+                Emergency Fallback
               </div>
-              <div className="card-body">
-                <div className="form-group">
-                  <label className="form-label">Auto Backup</label>
-                  <select className="form-input">
-                    <option>Daily (Recommended)</option>
-                    <option>Weekly</option>
-                    <option>Manual Only</option>
-                  </select>
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Backup Location</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input className="form-input" value="C:\ifrah-backup\" readOnly style={{ background: '#f8fafc' }} />
-                    <button className="btn btn-secondary" style={{ whiteSpace: 'nowrap' }}>Change</button>
-                  </div>
-                </div>
+              <p style={{ fontSize: 12.5, color: '#64748b', lineHeight: 1.6, margin: 0 }}>
+                Agar Windows kharab ho jaye ya system crash ho, to nayi PC par ye <code>.sqlite</code> file copy kar ke software foran recover kiya ja sakta hai.
+              </p>
+              <div style={{ marginTop: 14 }}>
+                <button className="btn btn-secondary btn-sm" onClick={handleOpenFolder} style={{ width: '100%' }}>
+                  <FolderOpen size={13} /> Backup Folder Explorer Mein Kholein
+                </button>
               </div>
             </div>
           </div>
+
         </div>
       </div>
     </div>

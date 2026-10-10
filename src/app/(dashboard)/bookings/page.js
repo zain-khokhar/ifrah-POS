@@ -163,7 +163,7 @@ export default function BookingsPage() {
                     <td>
                       <div style={{ display: 'flex', gap: 5 }}>
                         {!isViewer && (
-                          <Link href={`/bookings/${b.id}/edit`} className="btn btn-secondary btn-sm">
+                          <Link href={`/bookings/new?id=${b.id}`} className="btn btn-secondary btn-sm">
                             <Edit size={11} /> Edit
                           </Link>
                         )}

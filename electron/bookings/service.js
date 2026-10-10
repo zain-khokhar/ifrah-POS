@@ -208,6 +208,14 @@ function createBookingsService(db) {
     const bookingMonth = computeMonth(input.booking_date);
     const totalDays    = computeReturningDays(input.delivery_date, input.returning_date);
 
+    const advanceAmount = Math.max(0, parseInt(input.advance_amount || 0, 10));
+    const advanceMethod = String(input.advance_method || 'cash').toLowerCase();
+    const advanceDate   = input.advance_date ? String(input.advance_date).trim() : (str(input.booking_date) || new Date().toISOString().slice(0, 10));
+    const advanceNote   = input.advance_note ? String(input.advance_note).trim() : 'Advance payment';
+
+    const amountPaid = advanceAmount;
+    const remaining  = Math.max(0, grandTotal - amountPaid);
+
     const insertBooking = db.prepare(`
       INSERT INTO bookings (
         booking_no, customer_id, city_id, status,
@@ -217,7 +225,7 @@ function createBookingsService(db) {
         discount, grand_total, amount_paid, remaining,
         security_deposit, created_by, updated_by
       ) VALUES (
-        ?,?,?,?,  ?,?,?,  ?,?,  ?,?,?,  ?,?,0,?,  ?,?,?
+        ?,?,?,?,  ?,?,?,  ?,?,  ?,?,?,  ?,?,?,?,  ?,?,?
       )
     `);
 
@@ -246,7 +254,8 @@ function createBookingsService(db) {
         str(input.notes),
         discount,
         grandTotal,
-        grandTotal,   // remaining = grandTotal before any payment
+        amountPaid,
+        remaining,
         Math.max(0, parseInt(input.security_deposit || 0, 10)),
         user.id,
         user.id,
@@ -261,18 +270,105 @@ function createBookingsService(db) {
         );
       }
 
+      if (advanceAmount > 0) {
+        db.prepare(`
+          INSERT INTO payments (
+            booking_id, amount, payment_method, kind,
+            received_by, note, paid_on, is_void
+          ) VALUES (?, ?, ?, 'rental', ?, ?, ?, 0)
+        `).run(bookingId, advanceAmount, advanceMethod, user.id, advanceNote, advanceDate);
+      }
+
       db.prepare(`
         INSERT INTO audit_logs (user_id, action, table_name, record_id, new_values)
         VALUES (?, ?, ?, ?, ?)
       `).run(
         user.id, 'booking.create', 'bookings', bookingId,
-        JSON.stringify({ booking_no: bookingNo, grand_total: grandTotal, items: builtItems.length }),
+        JSON.stringify({
+          booking_no: bookingNo,
+          grand_total: grandTotal,
+          advance_amount: advanceAmount,
+          items: builtItems.length,
+        }),
       );
 
       return r;
     })();
 
     return { id: result.lastInsertRowid, booking_no: bookingNo };
+  }
+
+  // ─── CHECK CAN CLOSE ───────────────────────────────────────────────────────
+  function canClose(bookingId) {
+    const b = db.prepare(`
+      SELECT id, booking_no, status, delivered_on, returned_on, remaining, grand_total, amount_paid
+      FROM bookings WHERE id = ? AND deleted_at IS NULL
+    `).get(bookingId);
+    if (!b) return { canClose: false, checklist: { delivered: false, returned: false, fullyPaid: false }, missing: ['Booking not found.'] };
+
+    const delivered = !!b.delivered_on;
+    const returned  = !!b.returned_on;
+    const fullyPaid = (b.remaining || 0) === 0;
+
+    const missing = [];
+    if (!delivered) missing.push('Dresses deliver nahi hui (Delivered mark hona baqi hai)');
+    if (!returned)  missing.push('Dresses wapis nahi aayi (Returned mark hona baqi hai)');
+    if (!fullyPaid) missing.push(`Baqaya raqam Rs. ${b.remaining.toLocaleString()} ada hona baqi hai`);
+
+    return {
+      canClose: missing.length === 0,
+      checklist: { delivered, returned, fullyPaid },
+      missing,
+    };
+  }
+
+  // ─── SET STATUS (with Close validation) ────────────────────────────────────
+  function setStatus(session, bookingId, newStatus, { forceClose = false, forceReason = '' } = {}) {
+    requireRole(session, [ROLES.OWNER, ROLES.CASHIER]);
+    const user = session.user;
+
+    const existing = db.prepare(`
+      SELECT * FROM bookings WHERE id = ? AND deleted_at IS NULL
+    `).get(bookingId);
+    if (!existing) throw new Error('Booking nahi mili.');
+
+    if (newStatus === 'Closed' && existing.status !== 'Closed') {
+      const check = canClose(bookingId);
+      if (!check.canClose) {
+        if (user.role === ROLES.OWNER && forceClose) {
+          if (!forceReason || !forceReason.trim()) {
+            throw new Error('Owner ke force-close karne ke liye reason likhna zaroori hai.');
+          }
+          db.prepare(`
+            INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values, new_values)
+            VALUES (?, 'booking.force_close', 'bookings', ?, ?, ?)
+          `).run(
+            user.id, bookingId,
+            JSON.stringify({ status: existing.status }),
+            JSON.stringify({
+              status: 'Closed',
+              forceReason: forceReason.trim(),
+              missingConditions: check.missing,
+            })
+          );
+        } else {
+          throw new Error(`Booking close nahi ho sakti: ${check.missing.join(', ')}`);
+        }
+      }
+    }
+
+    db.prepare(`
+      UPDATE bookings
+      SET status = ?, updated_by = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+      WHERE id = ?
+    `).run(newStatus, user.id, bookingId);
+
+    db.prepare(`
+      INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values, new_values)
+      VALUES (?, 'booking.status_change', 'bookings', ?, ?, ?)
+    `).run(user.id, bookingId, JSON.stringify({ status: existing.status }), JSON.stringify({ status: newStatus }));
+
+    return { ok: true, status: newStatus };
   }
 
   // ─── UPDATE ───────────────────────────────────────────────────────────────
@@ -284,6 +380,32 @@ function createBookingsService(db) {
       `SELECT * FROM bookings WHERE id = ? AND deleted_at IS NULL`
     ).get(id);
     if (!existing) throw new Error('Booking not found.');
+
+    const targetStatus = input.status || existing.status;
+    if (targetStatus === 'Closed' && existing.status !== 'Closed') {
+      const check = canClose(id);
+      if (!check.canClose) {
+        if (user.role === ROLES.OWNER && input.forceClose) {
+          if (!input.forceReason || !input.forceReason.trim()) {
+            throw new Error('Owner ke force-close karne ke liye reason likhna zaroori hai.');
+          }
+          db.prepare(`
+            INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values, new_values)
+            VALUES (?, 'booking.force_close', 'bookings', ?, ?, ?)
+          `).run(
+            user.id, id,
+            JSON.stringify({ status: existing.status }),
+            JSON.stringify({
+              status: 'Closed',
+              forceReason: input.forceReason.trim(),
+              missingConditions: check.missing,
+            })
+          );
+        } else {
+          throw new Error(`Booking close nahi ho sakti:\n- ${check.missing.join('\n- ')}`);
+        }
+      }
+    }
 
     const bookingNo    = existing.booking_no;
     const rawItems     = input.items || [];
@@ -323,7 +445,7 @@ function createBookingsService(db) {
     db.transaction(() => {
       updateBooking.run(
         num(input.customer_id), num(input.city_id),
-        input.status || existing.status,
+        targetStatus,
         str(input.booking_date), str(input.delivery_date), str(input.returning_date),
         bookingMonth, totalDays,
         str(input.relative_name), str(input.relative_relation), str(input.notes),
@@ -345,7 +467,7 @@ function createBookingsService(db) {
       `).run(
         user.id, 'booking.update', 'bookings', id,
         JSON.stringify({ grand_total: existing.grand_total, status: existing.status }),
-        JSON.stringify({ grand_total: grandTotal, status: input.status, items: builtItems.length }),
+        JSON.stringify({ grand_total: grandTotal, status: targetStatus, items: builtItems.length }),
       );
     })();
 
@@ -434,6 +556,8 @@ function createBookingsService(db) {
     create, update, softDelete,
     recalcTotals,
     todaySummary,
+    canClose,
+    setStatus,
     // expose computation helpers for tests & UI
     computeMonth,
     computeReturningDays,

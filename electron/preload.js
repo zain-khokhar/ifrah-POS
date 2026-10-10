@@ -82,5 +82,41 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete:        (id)        => ipcRenderer.invoke('bookings:delete', id),
     recalcTotals:  (id)        => ipcRenderer.invoke('bookings:recalcTotals', id),
     todaySummary:  ()          => ipcRenderer.invoke('bookings:todaySummary'),
+    canClose:      (id)        => ipcRenderer.invoke('bookings:canClose', id),
+    setStatus:     (id, st, op)=> ipcRenderer.invoke('bookings:setStatus', id, st, op),
+  },
+
+  // ─── Payments ─────────────────────────────────────────────────────────────
+  payments: {
+    create:        (input)          => ipcRenderer.invoke('payments:create', input),
+    void:          (id, reason)     => ipcRenderer.invoke('payments:void', id, reason),
+    listByBooking: (bookingId)      => ipcRenderer.invoke('payments:listByBooking', bookingId),
+    listAll:       (filters)        => ipcRenderer.invoke('payments:listAll', filters),
+    summary:       (filters)        => ipcRenderer.invoke('payments:summary', filters),
+  },
+
+  // ─── Backup ───────────────────────────────────────────────────────────────
+  backup: {
+    create:        (options)        => ipcRenderer.invoke('backup:create', options),
+    chooseAndSave: ()               => ipcRenderer.invoke('backup:chooseAndSave'),
+    list:          ()               => ipcRenderer.invoke('backup:list'),
+    openFolder:    ()               => ipcRenderer.invoke('backup:openFolder'),
+  },
+
+  // ─── Availability (Phase 6) ───────────────────────────────────────────────
+  // checkClash: { available: bool, clashes: [] }
+  availability: {
+    checkClash:     (params)   => ipcRenderer.invoke('availability:checkClash', params),
+    getDresses:     (params)   => ipcRenderer.invoke('availability:getDresses', params),
+    getBookedRanges:(dressId)  => ipcRenderer.invoke('availability:getBookedRanges', dressId),
+    logOverride:    (params)   => ipcRenderer.invoke('availability:logOverride', params),
+  },
+
+  // ─── Search (Phase 7) ─────────────────────────────────────────────────────
+  // filters: { q, status, month, dateFrom, dateTo, dateField, cityId, castId, limit, offset }
+  search: {
+    query: (filters) => ipcRenderer.invoke('search:query', filters),
+    count: (filters) => ipcRenderer.invoke('search:count', filters),
   },
 });
+

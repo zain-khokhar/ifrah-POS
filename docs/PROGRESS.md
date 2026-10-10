@@ -1,5 +1,5 @@
 # Progress
-Current phase: 4
+Current phase: 5
 Last updated: 2026-10-10
 
 - [x] Phase 0  Decisions and setup
@@ -7,7 +7,7 @@ Last updated: 2026-10-10
 - [x] Phase 2  Login, roles, audit
 - [x] Phase 3  Lists, customers, dresses
 - [x] Phase 4  Booking screen
-- [ ] Phase 5  Payments and status
+- [x] Phase 5  Payments and status
 - [ ] Phase 6  Availability and clash
 - [ ] Phase 7  Search and filters
 - [ ] Phase 8  Receipts and printing
@@ -61,7 +61,30 @@ Last updated: 2026-10-10
 
 ---
 
+## Phase 5 Implementation Status
+- **Payments Engine (`electron/payments/service.js` & IPC):**
+  - Advance payment captured atomically with booking creation (`advance_amount`, `advance_method`, `advance_date`, `advance_note`).
+  - Append-only ledger: records cannot be edited or deleted; corrections require voiding with a mandatory reason.
+  - Void permission strictly Owner-only (Cashiers rejected with audit logging).
+  - Live calculation: `remaining = Math.max(0, grand_total - sum(rental_payments where is_void = 0))`.
+  - Security deposits (`kind: 'deposit'`) tracked separately and never deducted from rental remaining balance.
+  - Live balance status: "Fully Paid ✓", "Overpaid (Rs X)", or "Remaining: Rs X".
+  - Payments dashboard (`/payments`) connected to real database with search, method filters, date filters, and live revenue stats.
+- **Booking Status Workflow:**
+  - Status transitions strictly validated (`None`, `Open`, `Pending`, `Closed`).
+  - `Closed` status guard: checks that all dresses are delivered, returned, and remaining balance is zero.
+  - Missing checklist modal: clearly lists missing items in friendly Urdu/English.
+  - Owner force-close override: Owner can close incomplete bookings with a logged override reason.
+- **Manual Backup Engine (`electron/backup/service.js` & IPC):**
+  - Uses safe SQLite online backup / `VACUUM INTO` ensuring zero data corruption during live operations.
+  - Pre-verifies database with `PRAGMA integrity_check` before export.
+  - Windows Save As native file dialog (`chooseAndSaveBackup`) for exporting directly to USB, external hard drive, or any user folder.
+  - Default folder quick backup and backup history manager with file sizes and timestamps.
+  - Dedicated Backup UI (`/backup`) with status badges, one-click manual export, and open folder button.
+
+---
+
 ## Verification & Tests
-- `npm test`: **72 / 72 unit tests passed** (including Phase 2 auth/audit, Phase 3 customers/dresses/lists, and Phase 4 booking calculation and business logic suites).
+- `npm test`: **97 / 97 unit tests passed** (0 failures, 19 dedicated tests for Phase 5 payment ledger, voids, remaining math, closed status guards, and backup integrity).
 - `npm run lint`: **0 errors, 0 warnings** (Clean ESLint check across all dashboard pages).
-- `npm run build`: **Compiled & exported successfully** across all 17 static routes.
+- `npm run build`: **Compiled & exported successfully** across all 17 static routes via Next.js Turbopack.
