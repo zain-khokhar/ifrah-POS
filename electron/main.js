@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
 const { getDb, closeDb } = require('./database/db');
 const { createAuthService } = require('./auth/service');
 const { requireRole, ROLES, AuthorizationError } = require('./auth/roles');
@@ -52,6 +53,22 @@ function createWindow() {
     win.show();
     if (isDev) win.webContents.openDevTools({ mode: 'detach' });
   });
+  win.webContents.once('did-finish-load', () => win.show());
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(`[Window] Failed to load ${validatedURL}: ${errorCode} ${errorDescription}`);
+    win.show();
+  });
+
+  if (!isDev) {
+    win.webContents.session.webRequest.onBeforeRequest({ urls: ['file://*/*/_next/*'] }, (details, callback) => {
+      const pathname = decodeURIComponent(new URL(details.url).pathname);
+      if (pathname.includes('/out/_next/')) return callback({});
+      const nextIndex = pathname.indexOf('/_next/');
+      if (nextIndex === -1) return callback({});
+      const target = path.join(__dirname, '../out', pathname.slice(nextIndex + 1));
+      callback({ redirectURL: pathToFileURL(target).toString() });
+    });
+  }
 
   if (isDev) {
     // Dev: load from Next.js dev server
