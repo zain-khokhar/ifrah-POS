@@ -4,31 +4,22 @@ import Link from 'next/link';
 import {
   Truck, RotateCcw, AlertTriangle, CreditCard,
   ArrowRight, Plus, Clock, Info,
-  Zap, BarChart2, UserPlus, Shirt,
+  Zap, BarChart2, UserPlus, Shirt, BookOpen,
 } from 'lucide-react';
 
-const MOCK_BOOKINGS = [
-  { id: 'BK-001', customer: 'Ayesha Khan',    dress: 'Red Bridal Lehenga', delivery: '10 Oct', returning: '12 Oct', status: 'pending', amount: 25000 },
-  { id: 'BK-002', customer: 'Fatima Ahmed',   dress: 'Blue Gharara',       delivery: '11 Oct', returning: '13 Oct', status: 'open',    amount: 15000 },
-  { id: 'BK-003', customer: 'Sana Malik',     dress: 'Green Saree',        delivery: '09 Oct', returning: '10 Oct', status: 'closed',  amount: 8000  },
-  { id: 'BK-004', customer: 'Zara Hussain',   dress: 'Pink Lehnga',        delivery: '12 Oct', returning: '14 Oct', status: 'pending', amount: 18000 },
-  { id: 'BK-005', customer: 'Hina Baig',      dress: 'Maroon Sharara',     delivery: '10 Oct', returning: '11 Oct', status: 'open',    amount: 12000 },
-];
-
-const MOCK_SCHEDULE = [
-  { time: '10:00 AM', name: 'Ayesha Khan',  detail: 'Delivery — Red Bridal Lehenga', type: 'delivery' },
-  { time: '12:30 PM', name: 'Fatima Ahmed', detail: 'Return — Blue Gharara',          type: 'return'   },
-  { time: '03:00 PM', name: 'Sana Malik',   detail: 'Delivery — Green Saree',         type: 'delivery' },
-];
-
-const STATUS_MAP = {
-  pending: { cls: 'badge-warning', label: 'Pending' },
-  open:    { cls: 'badge-info',    label: 'Open'    },
-  closed:  { cls: 'badge-gray',    label: 'Closed'  },
+const STATUS_CHIP = {
+  None:    { bg: '#f1f5f9', color: '#64748b' },
+  Open:    { bg: '#dbeafe', color: '#1d4ed8' },
+  Pending: { bg: '#fef3c7', color: '#d97706' },
+  Closed:  { bg: '#dcfce7', color: '#16a34a' },
 };
 
 export default function DashboardPage() {
-  const [summary, setSummary] = useState({ deliveries: 0, returns: 0, overdue: 0, pending: 0 });
+  const [summary, setSummary]               = useState({ deliveries: 0, returns: 0, overdue: 0, pending: 0 });
+  const [recentBookings, setRecentBookings] = useState([]);
+  const [scheduleItems, setScheduleItems]   = useState([]);
+  const [loading, setLoading]               = useState(true);
+
   const [user, setUser] = useState(() => {
     if (typeof window === 'undefined') return null;
     try {
@@ -38,19 +29,63 @@ export default function DashboardPage() {
       return null;
     }
   });
-  const [currentTime, setCurrentTime] = useState(new Date());
 
-  useEffect(() => {
-    async function load() {
-      const res = await window.electronAPI?.bookings.todaySummary();
-      if (res?.ok) setSummary(res.data);
-    }
-    load();
-  }, []);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     const t = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true);
+      try {
+        const [sumRes, bookingsRes] = await Promise.all([
+          window.electronAPI?.bookings.todaySummary(),
+          window.electronAPI?.bookings.list({ limit: 10 }),
+        ]);
+
+        if (sumRes?.ok) {
+          setSummary(sumRes.data);
+        }
+
+        if (bookingsRes?.ok) {
+          const list = bookingsRes.data || [];
+          setRecentBookings(list.slice(0, 5));
+
+          const todayIso = new Date().toISOString().slice(0, 10);
+          const schedule = [];
+
+          list.forEach(b => {
+            if (b.delivery_date === todayIso) {
+              schedule.push({
+                type: 'delivery',
+                time: 'Delivery',
+                name: b.customer_name || `Booking #${b.booking_no}`,
+                detail: b.dresses_summary || `Booking #${b.booking_no}`,
+              });
+            }
+            if (b.returning_date === todayIso) {
+              schedule.push({
+                type: 'return',
+                time: 'Return',
+                name: b.customer_name || `Booking #${b.booking_no}`,
+                detail: b.dresses_summary || `Booking #${b.booking_no}`,
+              });
+            }
+          });
+
+          setScheduleItems(schedule);
+        }
+      } catch (err) {
+        console.error('Failed to load dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadData();
   }, []);
 
   const greeting = () => {
@@ -101,7 +136,7 @@ export default function DashboardPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">
-            {greeting()}, {user?.name?.split(' ')[0] || 'User'}
+            {greeting()}, {user?.name?.split(' ')[0] || user?.full_name?.split(' ')[0] || 'User'}
           </h1>
           <p className="page-subtitle">{todayStr} • {timeStr}</p>
         </div>
@@ -146,47 +181,82 @@ export default function DashboardPage() {
                 Sab Dekhen <ArrowRight size={12} />
               </Link>
             </div>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Booking ID</th>
-                  <th>Customer</th>
-                  <th>Dress</th>
-                  <th>Delivery</th>
-                  <th>Return</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: 'right' }}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {MOCK_BOOKINGS.map(b => {
-                  const { cls, label } = STATUS_MAP[b.status];
-                  return (
-                    <tr key={b.id}>
-                      <td>
-                        <span style={{ fontWeight: 700, color: '#7c3aed', fontFamily: 'monospace', fontSize: 13 }}>
-                          {b.id}
-                        </span>
-                      </td>
-                      <td style={{ fontWeight: 600 }}>{b.customer}</td>
-                      <td style={{ color: '#64748b' }}>{b.dress}</td>
-                      <td>{b.delivery}</td>
-                      <td>{b.returning}</td>
-                      <td><span className={`badge ${cls}`}>{label}</span></td>
-                      <td style={{ textAlign: 'right', fontWeight: 700 }}>
-                        Rs. {b.amount.toLocaleString()}
-                      </td>
+
+            {loading ? (
+              <div style={{ padding: '36px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                Bookings load ho rahi hain...
+              </div>
+            ) : recentBookings.length === 0 ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12, background: '#f8fafc',
+                  border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', margin: '0 auto 12px auto', color: '#94a3b8',
+                }}>
+                  <BookOpen size={20} />
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                  Abhi koi booking nahi hai
+                </div>
+                <p style={{ fontSize: 12.5, color: '#64748b', margin: '0 auto 14px auto', maxWidth: 300 }}>
+                  Aap ki pehli booking yahan display hogi.
+                </p>
+                <Link href="/bookings/new" className="btn btn-primary btn-sm" style={{ display: 'inline-flex' }}>
+                  <Plus size={14} /> Pehli Booking Banayein
+                </Link>
+              </div>
+            ) : (
+              <>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Booking ID</th>
+                      <th>Customer</th>
+                      <th>Dress</th>
+                      <th>Delivery</th>
+                      <th>Return</th>
+                      <th>Status</th>
+                      <th style={{ textAlign: 'right' }}>Amount</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#64748b' }}>
-              <span>5 recent bookings dikha rahe hain</span>
-              <span style={{ fontWeight: 700, color: '#0f172a' }}>
-                Total: Rs. {MOCK_BOOKINGS.reduce((s, b) => s + b.amount, 0).toLocaleString()}
-              </span>
-            </div>
+                  </thead>
+                  <tbody>
+                    {recentBookings.map(b => {
+                      const chip = STATUS_CHIP[b.status] || STATUS_CHIP.None;
+                      return (
+                        <tr key={b.id}>
+                          <td>
+                            <span style={{ fontWeight: 700, color: '#7c3aed', fontFamily: 'monospace', fontSize: 13 }}>
+                              #{b.booking_no}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: 600 }}>{b.customer_name || '—'}</td>
+                          <td style={{ color: '#64748b' }}>{b.dresses_summary || '—'}</td>
+                          <td>{b.delivery_date || '—'}</td>
+                          <td>{b.returning_date || '—'}</td>
+                          <td>
+                            <span style={{
+                              background: chip.bg, color: chip.color,
+                              padding: '2px 8px', borderRadius: 20, fontSize: 11.5, fontWeight: 700,
+                            }}>
+                              {b.status}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                            Rs. {(b.grand_total || 0).toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#64748b' }}>
+                  <span>{recentBookings.length} recent booking{recentBookings.length !== 1 ? 's' : ''}</span>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                    Total: Rs. {recentBookings.reduce((s, b) => s + (b.grand_total || 0), 0).toLocaleString()}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Right Column */}
@@ -201,25 +271,31 @@ export default function DashboardPage() {
                 </h2>
               </div>
               <div style={{ padding: '10px 14px' }}>
-                {MOCK_SCHEDULE.map((item, i) => (
-                  <div key={i} style={{
-                    display: 'flex', gap: 12,
-                    padding: '8px 0',
-                    borderBottom: i < MOCK_SCHEDULE.length - 1 ? '1px solid #f1f5f9' : 'none',
-                  }}>
-                    <div style={{
-                      width: 3, borderRadius: 3, flexShrink: 0,
-                      background: item.type === 'delivery' ? '#3b82f6' : '#10b981',
-                      alignSelf: 'stretch',
-                      minHeight: 36,
-                    }} />
-                    <div>
-                      <div style={{ fontSize: 10.5, color: '#94a3b8', marginBottom: 2 }}>{item.time}</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{item.name}</div>
-                      <div style={{ fontSize: 11.5, color: '#64748b' }}>{item.detail}</div>
-                    </div>
+                {scheduleItems.length === 0 ? (
+                  <div style={{ padding: '18px 8px', textAlign: 'center', color: '#94a3b8', fontSize: 12.5 }}>
+                    Aaj ke liye koi delivery ya return nahi hai.
                   </div>
-                ))}
+                ) : (
+                  scheduleItems.map((item, i) => (
+                    <div key={i} style={{
+                      display: 'flex', gap: 12,
+                      padding: '8px 0',
+                      borderBottom: i < scheduleItems.length - 1 ? '1px solid #f1f5f9' : 'none',
+                    }}>
+                      <div style={{
+                        width: 3, borderRadius: 3, flexShrink: 0,
+                        background: item.type === 'delivery' ? '#3b82f6' : '#10b981',
+                        alignSelf: 'stretch',
+                        minHeight: 36,
+                      }} />
+                      <div>
+                        <div style={{ fontSize: 10.5, color: '#94a3b8', marginBottom: 2 }}>{item.time}</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{item.name}</div>
+                        <div style={{ fontSize: 11.5, color: '#64748b' }}>{item.detail}</div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

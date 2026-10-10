@@ -6,6 +6,7 @@ import {
   Phone, CreditCard, MapPin, User, Edit, Trash2, Eye,
   RefreshCw, AlertCircle,
 } from 'lucide-react';
+import { formatPakPhone, cnicMask, validateCustomer } from '@/lib/customerValidation';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function emptyForm() {
@@ -14,13 +15,6 @@ function emptyForm() {
     relation_type_id: '', relative_name: '', relative_phone: '', relative_cnic: '',
     city_id: '', cast_id: '', address: '', notes: '',
   };
-}
-
-function cnicMask(value) {
-  const digits = value.replace(/\D/g, '').slice(0, 13);
-  if (digits.length <= 5)  return digits;
-  if (digits.length <= 12) return `${digits.slice(0,5)}-${digits.slice(5)}`;
-  return `${digits.slice(0,5)}-${digits.slice(5,12)}-${digits.slice(12)}`;
 }
 
 // ─── Learning Combobox ───────────────────────────────────────────────────────
@@ -146,7 +140,7 @@ function LearningCombobox({ tableName, value, onChange, placeholder, disabled })
 
 // ─── Customer Form Modal ─────────────────────────────────────────────────────
 function CustomerModal({ editCustomer, onClose, onSaved, userRole }) {
-  const [form,       setForm]      = useState(editCustomer ? {
+  const [form, setForm] = useState(editCustomer ? {
     name: editCustomer.name || '', phone: editCustomer.phone || '',
     phone2: editCustomer.phone2 || '', cnic: editCustomer.cnic || '',
     relation_type_id: editCustomer.relation_type_id || '',
@@ -157,25 +151,28 @@ function CustomerModal({ editCustomer, onClose, onSaved, userRole }) {
     cast_id: editCustomer.cast_id || '',
     address: editCustomer.address || '', notes: editCustomer.notes || '',
   } : emptyForm());
-  const [dupWarning, setDupWarning] = useState(null);
-  const [dupChecked, setDupChecked] = useState(false);
-  const [saving,     setSaving]    = useState(false);
-  const [error,      setError]     = useState('');
-  const [cnicError,  setCnicError] = useState('');
+  const [dupWarning,   setDupWarning]   = useState(null);
+  const [dupChecked,   setDupChecked]   = useState(false);
+  const [saving,       setSaving]       = useState(false);
+  const [error,        setError]        = useState('');
+  const [fieldErrors,  setFieldErrors]  = useState({});
 
-  const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+  const handleFieldChange = (key, val) => {
+    let finalVal = val;
+    if (key === 'phone' || key === 'phone2' || key === 'relative_phone') {
+      finalVal = formatPakPhone(val);
+    } else if (key === 'cnic' || key === 'relative_cnic') {
+      finalVal = cnicMask(val);
+    }
 
-  // CNIC live validation
-  function handleCnic(val) {
-    const masked = cnicMask(val);
-    set('cnic', masked);
-    if (masked && masked.length > 0 && masked.length < 15) setCnicError('Format: 00000-0000000-0');
-    else setCnicError('');
-  }
-  function handleRelCnic(val) {
-    const masked = cnicMask(val);
-    set('relative_cnic', masked);
-  }
+    setForm(prev => {
+      const updated = { ...prev, [key]: finalVal };
+      const { errors } = validateCustomer(updated, { isRequiredPhone: false });
+      setFieldErrors(errors);
+      return updated;
+    });
+    if (error) setError('');
+  };
 
   async function checkDuplicate() {
     if (!editCustomer && form.name) {
@@ -190,11 +187,21 @@ function CustomerModal({ editCustomer, onClose, onSaved, userRole }) {
 
   async function handleSave(forceCreate = false) {
     setError('');
+
+    // Strict validation
+    const { isValid, errors } = validateCustomer(form, { isRequiredPhone: true });
+    if (!isValid) {
+      setFieldErrors(errors);
+      setError('Barah-e-karam form ke surkh (red) hisson ko durust karein.');
+      return;
+    }
+
     if (!forceCreate && !dupChecked) {
       const hasDup = await checkDuplicate();
       setDupChecked(true);
       if (hasDup) return;
     }
+
     setSaving(true);
     try {
       let res;
@@ -223,7 +230,7 @@ function CustomerModal({ editCustomer, onClose, onSaved, userRole }) {
       zIndex: 200, padding: 20,
     }}>
       <div style={{
-        background: 'white', borderRadius: 16, width: '100%', maxWidth: 620,
+        background: 'white', borderRadius: 16, width: '100%', maxWidth: 650,
         maxHeight: '90vh', overflow: 'auto',
         boxShadow: '0 24px 60px rgba(0,0,0,0.2)',
       }}>
@@ -258,61 +265,158 @@ function CustomerModal({ editCustomer, onClose, onSaved, userRole }) {
             </div>
           )}
 
-          {/* Row 1: Customer */}
+          {/* Row 1: Customer Info */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
-              Customer
+              Customer Details
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div style={{ gridColumn: '1/-1' }}>
-                <label style={labelStyle}>Full Name</label>
-                <input className="form-input" value={form.name} onChange={e => set('name', e.target.value)}
-                  placeholder="Ayesha Khan" disabled={isViewer} />
+                <label style={labelStyle}>Full Name *</label>
+                <input
+                  className="form-input"
+                  value={form.name}
+                  onChange={e => handleFieldChange('name', e.target.value)}
+                  placeholder="Ayesha Khan"
+                  disabled={isViewer}
+                  style={{ borderColor: fieldErrors.name ? '#ef4444' : undefined }}
+                />
+                {fieldErrors.name && (
+                  <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={12} /> {fieldErrors.name}
+                  </div>
+                )}
               </div>
+
               <div>
-                <label style={labelStyle}>Phone 1</label>
-                <input className="form-input" value={form.phone} onChange={e => set('phone', e.target.value)}
-                  placeholder="03xx-xxxxxxx" disabled={isViewer} />
+                <label style={labelStyle}>Phone 1 (Mobile) *</label>
+                <input
+                  className="form-input"
+                  value={form.phone}
+                  onChange={e => handleFieldChange('phone', e.target.value)}
+                  placeholder="0300-1234567"
+                  disabled={isViewer}
+                  maxLength={12}
+                  style={{ borderColor: fieldErrors.phone ? '#ef4444' : undefined }}
+                />
+                {fieldErrors.phone && (
+                  <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={12} /> {fieldErrors.phone}
+                  </div>
+                )}
               </div>
+
               <div>
                 <label style={labelStyle}>Phone 2 (optional)</label>
-                <input className="form-input" value={form.phone2} onChange={e => set('phone2', e.target.value)}
-                  placeholder="03xx-xxxxxxx" disabled={isViewer} />
+                <input
+                  className="form-input"
+                  value={form.phone2}
+                  onChange={e => handleFieldChange('phone2', e.target.value)}
+                  placeholder="03xx-xxxxxxx"
+                  disabled={isViewer}
+                  maxLength={12}
+                  style={{ borderColor: fieldErrors.phone2 ? '#ef4444' : undefined }}
+                />
+                {fieldErrors.phone2 && (
+                  <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={12} /> {fieldErrors.phone2}
+                  </div>
+                )}
               </div>
+
               <div style={{ gridColumn: '1/-1' }}>
                 <label style={labelStyle}>CNIC (optional)</label>
-                <input className="form-input" value={form.cnic} onChange={e => handleCnic(e.target.value)}
-                  placeholder="00000-0000000-0" disabled={isViewer} />
-                {cnicError && <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 3 }}>{cnicError}</div>}
+                <input
+                  className="form-input"
+                  value={form.cnic}
+                  onChange={e => handleFieldChange('cnic', e.target.value)}
+                  placeholder="00000-0000000-0"
+                  disabled={isViewer}
+                  maxLength={15}
+                  style={{ borderColor: fieldErrors.cnic ? '#ef4444' : undefined }}
+                />
+                {fieldErrors.cnic && (
+                  <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={12} /> {fieldErrors.cnic}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Row 2: Relative */}
+          {/* Row 2: Relative / Guardian */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
-              Relative / Guardian
+              Relative / Guardian (Zamani / Hawaala)
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={labelStyle}>Relation</label>
-                <LearningCombobox tableName="relation_types" value={form.relation_type_id}
-                  onChange={v => set('relation_type_id', v)} placeholder="Husband..." disabled={isViewer} />
+                <LearningCombobox
+                  tableName="relation_types"
+                  value={form.relation_type_id}
+                  onChange={v => handleFieldChange('relation_type_id', v)}
+                  placeholder="Brother, Father, Husband..."
+                  disabled={isViewer}
+                />
+                {fieldErrors.relation_type_id && (
+                  <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={12} /> {fieldErrors.relation_type_id}
+                  </div>
+                )}
               </div>
+
               <div>
                 <label style={labelStyle}>Relative Name</label>
-                <input className="form-input" value={form.relative_name} onChange={e => set('relative_name', e.target.value)}
-                  placeholder="Muhammad Ali" disabled={isViewer} />
+                <input
+                  className="form-input"
+                  value={form.relative_name}
+                  onChange={e => handleFieldChange('relative_name', e.target.value)}
+                  placeholder="Muhammad Usman"
+                  disabled={isViewer}
+                  style={{ borderColor: fieldErrors.relative_name ? '#ef4444' : undefined }}
+                />
+                {fieldErrors.relative_name && (
+                  <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={12} /> {fieldErrors.relative_name}
+                  </div>
+                )}
               </div>
+
               <div>
                 <label style={labelStyle}>Relative Phone</label>
-                <input className="form-input" value={form.relative_phone} onChange={e => set('relative_phone', e.target.value)}
-                  placeholder="03xx-xxxxxxx" disabled={isViewer} />
+                <input
+                  className="form-input"
+                  value={form.relative_phone}
+                  onChange={e => handleFieldChange('relative_phone', e.target.value)}
+                  placeholder="03xx-xxxxxxx"
+                  disabled={isViewer}
+                  maxLength={12}
+                  style={{ borderColor: fieldErrors.relative_phone ? '#ef4444' : undefined }}
+                />
+                {fieldErrors.relative_phone && (
+                  <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={12} /> {fieldErrors.relative_phone}
+                  </div>
+                )}
               </div>
+
               <div>
                 <label style={labelStyle}>Relative CNIC (optional)</label>
-                <input className="form-input" value={form.relative_cnic} onChange={e => handleRelCnic(e.target.value)}
-                  placeholder="00000-0000000-0" disabled={isViewer} />
+                <input
+                  className="form-input"
+                  value={form.relative_cnic}
+                  onChange={e => handleFieldChange('relative_cnic', e.target.value)}
+                  placeholder="00000-0000000-0"
+                  disabled={isViewer}
+                  maxLength={15}
+                  style={{ borderColor: fieldErrors.relative_cnic ? '#ef4444' : undefined }}
+                />
+                {fieldErrors.relative_cnic && (
+                  <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={12} /> {fieldErrors.relative_cnic}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -325,38 +429,67 @@ function CustomerModal({ editCustomer, onClose, onSaved, userRole }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={labelStyle}>City</label>
-                <LearningCombobox tableName="cities" value={form.city_id}
-                  onChange={v => set('city_id', v)} placeholder="Lahore..." disabled={isViewer} />
+                <LearningCombobox
+                  tableName="cities"
+                  value={form.city_id}
+                  onChange={v => handleFieldChange('city_id', v)}
+                  placeholder="Lahore..."
+                  disabled={isViewer}
+                />
               </div>
+
               <div>
                 <label style={labelStyle}>Cast (Biradari)</label>
-                <LearningCombobox tableName="casts" value={form.cast_id}
-                  onChange={v => set('cast_id', v)} placeholder="Rajput..." disabled={isViewer} />
+                <LearningCombobox
+                  tableName="casts"
+                  value={form.cast_id}
+                  onChange={v => handleFieldChange('cast_id', v)}
+                  placeholder="Rajput..."
+                  disabled={isViewer}
+                />
               </div>
+
               <div style={{ gridColumn: '1/-1' }}>
                 <label style={labelStyle}>Address</label>
-                <input className="form-input" value={form.address} onChange={e => set('address', e.target.value)}
-                  placeholder="Gali no. 5, Mohalla..." disabled={isViewer} />
+                <input
+                  className="form-input"
+                  value={form.address}
+                  onChange={e => handleFieldChange('address', e.target.value)}
+                  placeholder="Gali no. 5, Mohalla..."
+                  disabled={isViewer}
+                />
               </div>
+
               <div style={{ gridColumn: '1/-1' }}>
                 <label style={labelStyle}>Notes (optional)</label>
-                <textarea className="form-input" value={form.notes} onChange={e => set('notes', e.target.value)}
-                  placeholder="Koi bhi zaruri baat..." rows={2} disabled={isViewer}
-                  style={{ resize: 'vertical', minHeight: 52 }} />
+                <textarea
+                  className="form-input"
+                  value={form.notes}
+                  onChange={e => handleFieldChange('notes', e.target.value)}
+                  placeholder="Koi bhi zaruri baat..."
+                  rows={2}
+                  disabled={isViewer}
+                  style={{ resize: 'vertical', minHeight: 52 }}
+                />
               </div>
             </div>
           </div>
 
           {error && (
-            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 12px', color: '#dc2626', fontSize: 13 }}>
-              {error}
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 12px', color: '#dc2626', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertCircle size={16} />
+              <span>{error}</span>
             </div>
           )}
 
           {!isViewer && (
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', paddingTop: 8 }}>
               <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-              <button className="btn btn-primary" onClick={() => handleSave()} disabled={saving}>
+              <button
+                className="btn btn-primary"
+                onClick={() => handleSave()}
+                disabled={saving || Object.keys(fieldErrors).length > 0}
+              >
                 {saving ? 'Saving...' : editCustomer ? 'Save Changes' : 'Add Customer'}
               </button>
             </div>
@@ -401,6 +534,8 @@ export default function CustomersPage() {
     fetchLists();
   }, []);
 
+  const reloadRef = useRef(null);
+
   useEffect(() => {
     async function fetchCustomers() {
       setLoading(true);
@@ -410,8 +545,13 @@ export default function CustomersPage() {
       if (res?.ok) setCustomers(res.data || []);
       setLoading(false);
     }
+    reloadRef.current = fetchCustomers;
     fetchCustomers();
   }, [search, cityId, castId]);
+
+  function loadCustomers() {
+    if (reloadRef.current) reloadRef.current();
+  }
 
   async function handleDelete(customer) {
     if (!window.confirm(`Delete ${customer.name}? This cannot be undone if they have bookings.`)) return;

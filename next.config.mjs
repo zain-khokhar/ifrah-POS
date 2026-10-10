@@ -2,7 +2,6 @@
 const nextConfig = {
   // Static export for Electron production build
   output: process.env.ELECTRON_BUILD === '1' ? 'export' : undefined,
-  assetPrefix: process.env.ELECTRON_BUILD === '1' ? './' : undefined,
   trailingSlash: true,
   images: { unoptimized: true },
   reactCompiler: true,

@@ -69,6 +69,7 @@ function createBookingsService(db) {
         cu.id   AS customer_id, cu.name AS customer_name,
         cu.phone AS customer_phone, cu.cnic AS customer_cnic,
         ci.name AS city,
+        (SELECT group_concat(dress_name_snapshot, ', ') FROM booking_items WHERE booking_id = b.id AND deleted_at IS NULL) AS dresses_summary,
         b.created_at, b.updated_at,
         ub.full_name AS updated_by_name
       FROM bookings b
@@ -193,6 +194,10 @@ function createBookingsService(db) {
   function create(session, input) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER]);
     const user = session.user;
+
+    if (!input.customer_id) {
+      throw new Error('Customer select karna zaroori hai. Pehle customer search karein ya naya customer banayein.');
+    }
 
     const bookingNo    = nextBookingNo();
     const rawItems     = input.items || [];

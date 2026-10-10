@@ -203,6 +203,72 @@ describe('customers service', () => {
     assert.ok(res.id);
   });
 
+  it('rejects incomplete phone (< 11 digits)', () => {
+    assert.throws(
+      () => customersService.create(ownerSession, { name: 'Ali Khan', phone: '03003333' }),
+      /11 digits/i
+    );
+  });
+
+  it('rejects phone not starting with 03', () => {
+    assert.throws(
+      () => customersService.create(ownerSession, { name: 'Ali Khan', phone: '04231234567' }),
+      /03 se shuru/i
+    );
+  });
+
+  it('rejects phone2 identical to phone', () => {
+    assert.throws(
+      () => customersService.create(ownerSession, {
+        name: 'Ali Khan',
+        phone: '03001234567',
+        phone2: '03001234567',
+      }),
+      /Phone 2 aur Phone 1 same nahi ho sakte/i
+    );
+  });
+
+  it('rejects relative phone identical to customer phone', () => {
+    assert.throws(
+      () => customersService.create(ownerSession, {
+        name: 'Ali Khan',
+        phone: '03001234567',
+        relation_type_id: 1,
+        relative_name: 'Usman Khan',
+        relative_phone: '03001234567',
+      }),
+      /Relative ka phone aur Customer ka phone same nahi ho sakta/i
+    );
+  });
+
+  it('rejects relative CNIC identical to customer CNIC', () => {
+    assert.throws(
+      () => customersService.create(ownerSession, {
+        name: 'Ali Khan',
+        phone: '03001234567',
+        cnic: '35202-2222222-2',
+        relation_type_id: 1,
+        relative_name: 'Usman Khan',
+        relative_phone: '03009876543',
+        relative_cnic: '35202-2222222-2',
+      }),
+      /Relative ka CNIC/i
+    );
+  });
+
+  it('rejects relative name identical to customer name', () => {
+    assert.throws(
+      () => customersService.create(ownerSession, {
+        name: 'Ali Khan',
+        phone: '03001234567',
+        relation_type_id: 1,
+        relative_name: 'ali khan',
+        relative_phone: '03009876543',
+      }),
+      /Relative ka naam customer ke naam jaisa nahi ho sakta/i
+    );
+  });
+
   it('findDuplicate catches same name+phone', () => {
     customersService.create(ownerSession, { name: 'Duplicate Test', phone: '03111111111' });
     const dup = customersService.findDuplicate('Duplicate Test', '03111111111');

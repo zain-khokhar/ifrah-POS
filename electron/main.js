@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs   = require('fs');
-const { pathToFileURL }        = require('url');
+const http = require('http');
 const { getDb, closeDb }       = require('./database/db');
 const { createAuthService }    = require('./auth/service');
 const { requireRole, ROLES, AuthorizationError } = require('./auth/roles');
@@ -17,6 +17,7 @@ let lists;
 let customers;
 let dresses;
 let bookings;
+let staticServer = null;
 
 function getSession(event) { return sessions.get(event.sender.id); }
 function protect(event, roles) { return requireRole(getSession(event), roles); }
@@ -34,8 +35,88 @@ function safeHandler(handler) {
   };
 }
 
+// ─── Local Static HTTP Server for Production Export ──────────────────────────
+const MIME_TYPES = {
+  '.html':  'text/html; charset=utf-8',
+  '.js':    'application/javascript; charset=utf-8',
+  '.mjs':   'application/javascript; charset=utf-8',
+  '.css':   'text/css; charset=utf-8',
+  '.json':  'application/json; charset=utf-8',
+  '.png':   'image/png',
+  '.jpg':   'image/jpeg',
+  '.jpeg':  'image/jpeg',
+  '.gif':   'image/gif',
+  '.svg':   'image/svg+xml',
+  '.ico':   'image/x-icon',
+  '.woff':  'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf':   'font/ttf',
+  '.txt':   'text/plain; charset=utf-8',
+  '.wasm':  'application/wasm',
+};
+
+function startStaticServer(outDir) {
+  const server = http.createServer((req, res) => {
+    try {
+      const parsedUrl = new URL(req.url, 'http://127.0.0.1');
+      const pathname = decodeURIComponent(parsedUrl.pathname);
+
+      // Prevent directory traversal attacks
+      const safePath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
+      const fullPath = path.join(outDir, safePath);
+
+      const candidates = [];
+      if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+        candidates.push(fullPath);
+      } else {
+        candidates.push(path.join(fullPath, 'index.html'));
+        candidates.push(`${fullPath}.html`);
+        candidates.push(path.join(outDir, 'index.html'));
+      }
+
+      let targetFile = null;
+      for (const cand of candidates) {
+        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+          targetFile = cand;
+          break;
+        }
+      }
+
+      if (!targetFile) {
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Not Found');
+        return;
+      }
+
+      const ext = path.extname(targetFile).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      const fileData = fs.readFileSync(targetFile);
+
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Length': fileData.length,
+        'Cache-Control': 'no-cache',
+      });
+      res.end(fileData);
+    } catch (err) {
+      console.error('[Static Server Error]', err);
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('500 Server Error');
+    }
+  });
+
+  return new Promise((resolve, reject) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      console.log(`[Static Server] Serving offline POS on http://127.0.0.1:${port}`);
+      resolve({ server, port });
+    });
+    server.on('error', reject);
+  });
+}
+
 // ─── Window ────────────────────────────────────────────────────────────────
-function createWindow() {
+function createWindow(serverPort) {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -56,48 +137,14 @@ function createWindow() {
     win.show();
     if (isDev) win.webContents.openDevTools({ mode: 'detach' });
   });
-  win.webContents.once('did-finish-load', () => win.show());
-  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
-    console.error(`[Window] Failed to load ${validatedURL}: ${errorCode} ${errorDescription}`);
-    win.show();
-  });
 
-  if (!isDev) {
-    win.webContents.session.webRequest.onBeforeRequest({ urls: ['file://*/*/_next/*'] }, (details, callback) => {
-      const pathname = decodeURIComponent(new URL(details.url).pathname);
-      if (pathname.includes('/out/_next/')) return callback({});
-      const nextIndex = pathname.indexOf('/_next/');
-      if (nextIndex === -1) return callback({});
-      const target = path.join(__dirname, '../out', pathname.slice(nextIndex + 1));
-      callback({ redirectURL: pathToFileURL(target).toString() });
-    });
-  }
-
-  if (isDev) {
-    win.loadURL('http://localhost:3000');
-  } else {
-    win.loadFile(path.join(__dirname, '../out/index.html'));
-  }
+  const appUrl = isDev ? 'http://localhost:3000' : `http://127.0.0.1:${serverPort}`;
+  win.loadURL(appUrl);
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
   });
-
-  if (!isDev) {
-    win.webContents.on('will-navigate', (event, url) => {
-      if (!url.startsWith('file://')) return;
-      const route = decodeURIComponent(new URL(url).pathname)
-        .replace(/^\/+[A-Za-z]:/, '')
-        .replace(/^\/+|\/+$/g, '');
-      const target = route
-        ? path.join(__dirname, '../out', route, 'index.html')
-        : path.join(__dirname, '../out/index.html');
-      if (!fs.existsSync(target)) return;
-      event.preventDefault();
-      win.loadFile(target);
-    });
-  }
 }
 
 // ─── Seed default list values at startup ────────────────────────────────────
@@ -112,10 +159,22 @@ function seedDefaults() {
     'Lehenga', 'Gharara', 'Sharara', 'Saree',
     'Anarkali Suit', 'Shalwar Kameez', 'Bridal Set', 'Other',
   ]);
+  lists.seedIfMissing('cities', [
+    'Lahore', 'Karachi', 'Islamabad', 'Rawalpindi', 'Faisalabad',
+    'Multan', 'Gujranwala', 'Sialkot', 'Peshawar', 'Quetta',
+    'Sargodha', 'Bahawalpur', 'Sheikhupura', 'Gujrat', 'Kasur',
+  ]);
+  lists.seedIfMissing('casts', [
+    'Jatt', 'Arain', 'Rajput', 'Malik', 'Gujjar', 'Sheikh',
+    'Syed', 'Butt', 'Mughal', 'Ansari', 'Qureshi', 'Khokhar',
+    'Awan', 'Kashmiri', 'Chaudhry', 'Other',
+  ]);
 }
 
+let appPort = 3000;
+
 // ─── App lifecycle ──────────────────────────────────────────────────────────
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const db  = getDb();
   auth      = createAuthService(db);
   lists     = createListsService(db);
@@ -124,14 +183,26 @@ app.whenReady().then(() => {
   bookings  = createBookingsService(db);
 
   seedDefaults();
-  createWindow();
+
+  if (!isDev) {
+    const outDir = path.resolve(__dirname, '../out');
+    const started = await startStaticServer(outDir);
+    staticServer = started.server;
+    appPort = started.port;
+  }
+
+  createWindow(appPort);
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(appPort);
   });
 });
 
 app.on('window-all-closed', () => {
+  if (staticServer) {
+    staticServer.close();
+    staticServer = null;
+  }
   closeDb();
   if (process.platform !== 'darwin') app.quit();
 });

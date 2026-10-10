@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Save, Printer, Plus, Trash2, ChevronDown, X, Check,
-  RefreshCw, AlertCircle, User, Calendar, Package, CreditCard,
+  RefreshCw, AlertCircle, User, Calendar, Package, UserPlus,
 } from 'lucide-react';
+import { formatPakPhone, cnicMask, validateCustomer } from '@/lib/customerValidation';
 
 // ─── Date input (DD-MM-YYYY display, YYYY-MM-DD storage) ─────────────────────
 function DateInput({ value, onChange, placeholder, disabled, id }) {
@@ -30,7 +31,6 @@ function DateInput({ value, onChange, placeholder, disabled, id }) {
   function handleChange(e) {
     const raw = e.target.value;
     setDisplay(raw);
-    // Try to parse DD-MM-YYYY or YYYY-MM-DD
     const m1 = raw.match(/^(\d{2})-(\d{2})-(\d{4})$/);
     if (m1) { onChange(`${m1[3]}-${m1[2]}-${m1[1]}`); return; }
     const m2 = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -48,6 +48,125 @@ function DateInput({ value, onChange, placeholder, disabled, id }) {
       placeholder={placeholder || 'DD-MM-YYYY'}
       disabled={disabled}
     />
+  );
+}
+
+// ─── Learning Combobox for Lists (Cities, Casts, Relations, etc.) ─────────────
+function LearningCombobox({ tableName, value, onChange, placeholder, disabled, id }) {
+  const [options, setOptions] = useState([]);
+  const [query,   setQuery]   = useState('');
+  const [open,    setOpen]    = useState(false);
+  const [adding,  setAdding]  = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    async function fetchOptions() {
+      const res = await window.electronAPI?.lists.get(tableName);
+      if (res?.ok) setOptions(res.data || []);
+    }
+    fetchOptions();
+  }, [tableName]);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selectedItem = options.find(o => String(o.id) === String(value));
+  const filtered = query
+    ? options.filter(o => o.name.toLowerCase().includes(query.toLowerCase()))
+    : options;
+  const showAdd = query.trim() &&
+    !options.some(o => o.name.toLowerCase() === query.trim().toLowerCase());
+
+  async function handleAdd() {
+    if (!query.trim()) return;
+    setAdding(true);
+    const res = await window.electronAPI?.lists.add(tableName, query.trim());
+    if (res?.ok) {
+      const res2 = await window.electronAPI?.lists.get(tableName);
+      if (res2?.ok) setOptions(res2.data || []);
+      onChange(res.id);
+      setQuery('');
+      setOpen(false);
+    }
+    setAdding(false);
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div
+        id={id}
+        className="form-input"
+        style={{ display: 'flex', alignItems: 'center', cursor: disabled ? 'default' : 'pointer', gap: 6, padding: '7px 10px' }}
+        onClick={() => { if (!disabled) { setOpen(o => !o); setQuery(''); } }}
+      >
+        <span style={{ flex: 1, color: selectedItem ? '#0f172a' : '#94a3b8', fontSize: 13.5, fontWeight: selectedItem ? 600 : 400 }}>
+          {selectedItem?.name || placeholder || 'Select karein ya type karein...'}
+        </span>
+        {value && !disabled && (
+          <X size={12} style={{ color: '#94a3b8', cursor: 'pointer' }}
+            onClick={e => { e.stopPropagation(); onChange(''); setQuery(''); }} />
+        )}
+        <ChevronDown size={12} style={{ color: '#94a3b8', flexShrink: 0 }} />
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+          background: 'white', border: '1px solid #e2e8f0', borderRadius: 8,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.12)', marginTop: 2, overflow: 'hidden',
+        }}>
+          <div style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9' }}>
+            <input
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && showAdd) handleAdd(); if (e.key === 'Escape') setOpen(false); }}
+              placeholder="Search karein ya naya likhein..."
+              style={{ width: '100%', border: 'none', outline: 'none', fontSize: 13, background: 'transparent', color: '#0f172a' }}
+            />
+          </div>
+          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+            {filtered.map(o => (
+              <div
+                key={o.id}
+                onClick={() => { onChange(o.id); setQuery(''); setOpen(false); }}
+                style={{
+                  padding: '8px 12px', cursor: 'pointer', fontSize: 13.5,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: String(o.id) === String(value) ? '#f5f3ff' : 'transparent',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = String(o.id) === String(value) ? '#f5f3ff' : '#f8fafc'}
+                onMouseLeave={e => e.currentTarget.style.background = String(o.id) === String(value) ? '#f5f3ff' : 'transparent'}
+              >
+                {String(o.id) === String(value) && <Check size={11} color="#7c3aed" />}
+                <span style={{ fontWeight: String(o.id) === String(value) ? 700 : 400, color: '#0f172a' }}>{o.name}</span>
+              </div>
+            ))}
+            {showAdd && (
+              <div
+                onClick={handleAdd}
+                style={{
+                  padding: '8px 12px', cursor: 'pointer', fontSize: 13.5, color: '#7c3aed',
+                  fontWeight: 600, borderTop: filtered.length ? '1px solid #f1f5f9' : 'none',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#f5f3ff'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                {adding ? <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={12} />}
+                &quot;{query.trim()}&quot; add karein
+              </div>
+            )}
+            {filtered.length === 0 && !showAdd && (
+              <div style={{ padding: 12, color: '#94a3b8', fontSize: 13 }}>Koi result nahi mila</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -130,7 +249,7 @@ function DressPicker({ value, valueName, onSelect, disabled }) {
                 style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13.5, color: '#7c3aed', fontWeight: 600, borderTop: filtered.length ? '1px solid #f1f5f9' : 'none', display: 'flex', alignItems: 'center', gap: 6 }}
                 onMouseEnter={e => e.currentTarget.style.background = '#f5f3ff'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                {adding ? <RefreshCw size={12} /> : <Plus size={12} />}
+                {adding ? <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={12} />}
                 &quot;{query.trim()}&quot; add karein
               </div>
             )}
@@ -144,14 +263,25 @@ function DressPicker({ value, valueName, onSelect, disabled }) {
   );
 }
 
-// ─── Customer search picker ───────────────────────────────────────────────────
-function CustomerPicker({ value, valueName, onSelect, disabled }) {
-  const [query,   setQuery]   = useState('');
-  const [results, setResults] = useState([]);
-  const [open,    setOpen]    = useState(false);
-  const [loading, setLoading] = useState(false);
+// ─── Customer Card with Search + Inline New Customer Creation ────────────────
+function CustomerCard({ customer, onSelectCustomer, disabled }) {
+  const [isCreating, setIsCreating] = useState(false);
+  const [query, setQuery]           = useState('');
+  const [results, setResults]       = useState([]);
+  const [open, setOpen]             = useState(false);
+  const [loading, setLoading]       = useState(false);
   const ref = useRef(null);
   const timer = useRef(null);
+
+  // New Customer Form State
+  const [newCust, setNewCust] = useState({
+    name: '', phone: '', phone2: '', cnic: '',
+    relation_type_id: '', relative_name: '', relative_phone: '', relative_cnic: '',
+    city_id: '', cast_id: '', address: '', notes: '',
+  });
+  const [custSaving, setCustSaving] = useState(false);
+  const [custError, setCustError]   = useState('');
+  const [custFieldErrors, setCustFieldErrors] = useState({});
 
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -159,7 +289,7 @@ function CustomerPicker({ value, valueName, onSelect, disabled }) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  function handleType(e) {
+  function handleSearch(e) {
     const q = e.target.value;
     setQuery(q);
     clearTimeout(timer.current);
@@ -172,40 +302,397 @@ function CustomerPicker({ value, valueName, onSelect, disabled }) {
     }, 250);
   }
 
+  function startCreate(namePrefill = '') {
+    setNewCust({
+      name: namePrefill || query || '',
+      phone: '', phone2: '', cnic: '',
+      relation_type_id: '', relative_name: '', relative_phone: '', relative_cnic: '',
+      city_id: '', cast_id: '', address: '', notes: '',
+    });
+    setCustError('');
+    setCustFieldErrors({});
+    setOpen(false);
+    setIsCreating(true);
+  }
+
+  function handleNewCustFieldChange(key, val) {
+    let finalVal = val;
+    if (key === 'phone' || key === 'phone2' || key === 'relative_phone') {
+      finalVal = formatPakPhone(val);
+    } else if (key === 'cnic' || key === 'relative_cnic') {
+      finalVal = cnicMask(val);
+    }
+
+    setNewCust(prev => {
+      const updated = { ...prev, [key]: finalVal };
+      const { errors } = validateCustomer(updated, { isRequiredPhone: false });
+      setCustFieldErrors(errors);
+      return updated;
+    });
+    if (custError) setCustError('');
+  }
+
+  async function handleSaveNewCustomer() {
+    setCustError('');
+    const { isValid, errors } = validateCustomer(newCust, { isRequiredPhone: true });
+    if (!isValid) {
+      setCustFieldErrors(errors);
+      setCustError('Barah-e-karam form ke surkh hisson ko durust karein.');
+      return;
+    }
+
+    setCustSaving(true);
+    try {
+      const res = await window.electronAPI?.customers.create(newCust);
+      if (!res?.ok) {
+        setCustError(res?.message || 'Customer save nahi ho saka.');
+        setCustSaving(false);
+        return;
+      }
+      const fullRes = await window.electronAPI?.customers.get(res.id);
+      if (fullRes?.ok) {
+        onSelectCustomer(fullRes.data);
+      } else {
+        onSelectCustomer({ id: res.id, name: newCust.name, phone: newCust.phone, cnic: newCust.cnic });
+      }
+      setIsCreating(false);
+      setQuery('');
+    } catch (err) {
+      setCustError(err.message || 'Error occurred');
+    } finally {
+      setCustSaving(false);
+    }
+  }
+
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      {value ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#f5f3ff', borderRadius: 8, border: '1px solid #ddd6fe' }}>
-          <User size={14} color="#7c3aed" />
-          <span style={{ flex: 1, fontWeight: 700, color: '#0f172a', fontSize: 13.5 }}>{valueName}</span>
-          {!disabled && <X size={13} style={{ color: '#94a3b8', cursor: 'pointer' }} onClick={() => onSelect(null)} />}
-        </div>
-      ) : (
-        <input className="form-input" value={query} onChange={handleType}
-          onFocus={() => { if (results.length) setOpen(true); }}
-          placeholder="Customer ka naam, phone ya CNIC search karein..."
-          disabled={disabled}
-          style={{ width: '100%' }} />
-      )}
-      {open && results.length > 0 && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.15)', marginTop: 2, overflow: 'hidden' }}>
-          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-            {results.map(c => (
-              <div key={c.id}
-                onClick={() => { onSelect(c); setQuery(''); setOpen(false); setResults([]); }}
-                style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f8fafc' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <div style={{ fontWeight: 700, fontSize: 13.5, color: '#0f172a' }}>{c.name}</div>
-                <div style={{ fontSize: 11.5, color: '#64748b' }}>
-                  {c.phone || '—'} {c.cnic ? `· ${c.cnic}` : ''} {c.city ? `· ${c.city}` : ''}
-                  <span style={{ marginLeft: 8, color: '#94a3b8' }}>{c.booking_count} bookings</span>
+    <div style={cardStyle}>
+      <div style={cardHdr}>
+        <User size={16} color="#7c3aed" />
+        <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>Customer Details</span>
+        {!disabled && !customer && !isCreating && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => startCreate('')}
+            style={{ marginLeft: 'auto', gap: 5 }}
+          >
+            <UserPlus size={13} /> Naya Customer
+          </button>
+        )}
+      </div>
+
+      <div style={cardBody}>
+        {/* State 1: Selected Customer */}
+        {customer && (
+          <div>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '12px 14px', background: '#f5f3ff', borderRadius: 8, border: '1px solid #ddd6fe',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#7c3aed', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15 }}>
+                  {customer.name?.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>{customer.name}</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>
+                    {customer.phone || 'Phone nahi hai'} {customer.cnic ? `• CNIC: ${customer.cnic}` : ''}
+                  </div>
                 </div>
               </div>
-            ))}
+              {!disabled && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => onSelectCustomer(null)}
+                  style={{ gap: 4 }}
+                >
+                  <X size={12} /> Doosra Chunein
+                </button>
+              )}
+            </div>
+
+            <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, fontSize: 12.5 }}>
+              <div style={{ background: '#f8fafc', padding: '8px 10px', borderRadius: 6, border: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>City</div>
+                <div style={{ fontWeight: 700, color: '#1e293b' }}>{customer.city || '—'}</div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '8px 10px', borderRadius: 6, border: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Relative</div>
+                <div style={{ fontWeight: 700, color: '#1e293b' }}>
+                  {customer.relative_name ? `${customer.relative_name} (${customer.customer_relation_type || 'Relative'})` : '—'}
+                </div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '8px 10px', borderRadius: 6, border: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Phone 2</div>
+                <div style={{ fontWeight: 700, color: '#1e293b' }}>{customer.phone2 || '—'}</div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '8px 10px', borderRadius: 6, border: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Previous Bookings</div>
+                <div style={{ fontWeight: 800, color: '#7c3aed' }}>{customer.booking_count ?? 0} bookings</div>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* State 2: Inline New Customer Creation Form */}
+        {!customer && isCreating && (
+          <div style={{ background: '#f8fafc', padding: 14, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <UserPlus size={15} /> Naya Customer Banayein
+              </div>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setIsCreating(false)}>
+                Cancel
+              </button>
+            </div>
+
+            {custError && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '8px 10px', color: '#dc2626', fontSize: 12.5, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <AlertCircle size={14} />
+                <span>{custError}</span>
+              </div>
+            )}
+
+            {/* Row 1: Name, Phone 1, Phone 2, CNIC */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={labelStyle}>Customer Name *</label>
+                <input
+                  className="form-input"
+                  value={newCust.name}
+                  onChange={e => handleNewCustFieldChange('name', e.target.value)}
+                  placeholder="Ayesha Khan"
+                  autoFocus
+                  style={{ borderColor: custFieldErrors.name ? '#ef4444' : undefined }}
+                />
+                {custFieldErrors.name && (
+                  <div style={{ fontSize: 11, color: '#ef4444', marginTop: 3 }}>
+                    {custFieldErrors.name}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label style={labelStyle}>Phone 1 (Mobile) *</label>
+                <input
+                  className="form-input"
+                  value={newCust.phone}
+                  onChange={e => handleNewCustFieldChange('phone', e.target.value)}
+                  placeholder="0300-1234567"
+                  maxLength={12}
+                  style={{ borderColor: custFieldErrors.phone ? '#ef4444' : undefined }}
+                />
+                {custFieldErrors.phone && (
+                  <div style={{ fontSize: 11, color: '#ef4444', marginTop: 3 }}>
+                    {custFieldErrors.phone}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label style={labelStyle}>Phone 2 (optional)</label>
+                <input
+                  className="form-input"
+                  value={newCust.phone2}
+                  onChange={e => handleNewCustFieldChange('phone2', e.target.value)}
+                  placeholder="03xx-xxxxxxx"
+                  maxLength={12}
+                  style={{ borderColor: custFieldErrors.phone2 ? '#ef4444' : undefined }}
+                />
+                {custFieldErrors.phone2 && (
+                  <div style={{ fontSize: 11, color: '#ef4444', marginTop: 3 }}>
+                    {custFieldErrors.phone2}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label style={labelStyle}>CNIC (optional)</label>
+                <input
+                  className="form-input"
+                  value={newCust.cnic}
+                  onChange={e => handleNewCustFieldChange('cnic', e.target.value)}
+                  placeholder="00000-0000000-0"
+                  maxLength={15}
+                  style={{ borderColor: custFieldErrors.cnic ? '#ef4444' : undefined }}
+                />
+                {custFieldErrors.cnic && (
+                  <div style={{ fontSize: 11, color: '#ef4444', marginTop: 3 }}>
+                    {custFieldErrors.cnic}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Row 2: Relative Info */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={labelStyle}>Rishta (Relation)</label>
+                <LearningCombobox
+                  tableName="relation_types"
+                  value={newCust.relation_type_id}
+                  onChange={v => handleNewCustFieldChange('relation_type_id', v)}
+                  placeholder="Brother, Father..."
+                />
+                {custFieldErrors.relation_type_id && (
+                  <div style={{ fontSize: 11, color: '#ef4444', marginTop: 3 }}>
+                    {custFieldErrors.relation_type_id}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label style={labelStyle}>Relative Name</label>
+                <input
+                  className="form-input"
+                  value={newCust.relative_name}
+                  onChange={e => handleNewCustFieldChange('relative_name', e.target.value)}
+                  placeholder="Relative name..."
+                  style={{ borderColor: custFieldErrors.relative_name ? '#ef4444' : undefined }}
+                />
+                {custFieldErrors.relative_name && (
+                  <div style={{ fontSize: 11, color: '#ef4444', marginTop: 3 }}>
+                    {custFieldErrors.relative_name}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label style={labelStyle}>Relative Phone</label>
+                <input
+                  className="form-input"
+                  value={newCust.relative_phone}
+                  onChange={e => handleNewCustFieldChange('relative_phone', e.target.value)}
+                  placeholder="03xx-xxxxxxx"
+                  maxLength={12}
+                  style={{ borderColor: custFieldErrors.relative_phone ? '#ef4444' : undefined }}
+                />
+                {custFieldErrors.relative_phone && (
+                  <div style={{ fontSize: 11, color: '#ef4444', marginTop: 3 }}>
+                    {custFieldErrors.relative_phone}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label style={labelStyle}>Relative CNIC</label>
+                <input
+                  className="form-input"
+                  value={newCust.relative_cnic}
+                  onChange={e => handleNewCustFieldChange('relative_cnic', e.target.value)}
+                  placeholder="00000-0000000-0"
+                  maxLength={15}
+                  style={{ borderColor: custFieldErrors.relative_cnic ? '#ef4444' : undefined }}
+                />
+                {custFieldErrors.relative_cnic && (
+                  <div style={{ fontSize: 11, color: '#ef4444', marginTop: 3 }}>
+                    {custFieldErrors.relative_cnic}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Row 3: City, Cast, Address */}
+            <div style={{ display: 'grid', gridTemplateColumns: '180px 180px 1fr', gap: 10, marginBottom: 12 }}>
+              <div>
+                <label style={labelStyle}>City</label>
+                <LearningCombobox tableName="cities" value={newCust.city_id} onChange={v => handleNewCustFieldChange('city_id', v)} placeholder="City..." />
+              </div>
+              <div>
+                <label style={labelStyle}>Cast (Biradari)</label>
+                <LearningCombobox tableName="casts" value={newCust.cast_id} onChange={v => handleNewCustFieldChange('cast_id', v)} placeholder="Cast..." />
+              </div>
+              <div>
+                <label style={labelStyle}>Address</label>
+                <input className="form-input" value={newCust.address} onChange={e => handleNewCustFieldChange('address', e.target.value)} placeholder="Ghar ka pata..." />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setIsCreating(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleSaveNewCustomer}
+                disabled={custSaving || Object.keys(custFieldErrors).length > 0}
+              >
+                {custSaving ? <><RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</> : <><Check size={13} /> Save &amp; Select Customer</>}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* State 3: Search Customer */}
+        {!customer && !isCreating && (
+          <div ref={ref} style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <input
+                  className="form-input"
+                  value={query}
+                  onChange={handleSearch}
+                  onFocus={() => { if (results.length) setOpen(true); }}
+                  placeholder="Customer ka naam, phone ya CNIC type karein..."
+                  disabled={disabled}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => startCreate('')}
+                disabled={disabled}
+                style={{ gap: 6, flexShrink: 0 }}
+              >
+                <Plus size={14} /> Naya Customer
+              </button>
+            </div>
+
+            {open && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+                background: 'white', border: '1px solid #e2e8f0', borderRadius: 8,
+                boxShadow: '0 8px 24px rgba(0,0,0,.15)', marginTop: 4, overflow: 'hidden',
+              }}>
+                <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                  {results.map(c => (
+                    <div
+                      key={c.id}
+                      onClick={() => { onSelectCustomer(c); setQuery(''); setOpen(false); setResults([]); }}
+                      style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f8fafc' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: 13.5, color: '#0f172a' }}>{c.name}</div>
+                      <div style={{ fontSize: 11.5, color: '#64748b' }}>
+                        {c.phone || '—'} {c.cnic ? `· CNIC: ${c.cnic}` : ''} {c.city ? `· City: ${c.city}` : ''}
+                        <span style={{ marginLeft: 8, color: '#7c3aed', fontWeight: 600 }}>{c.booking_count || 0} bookings</span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Add Customer shortcut */}
+                  <div
+                    onClick={() => startCreate(query.trim())}
+                    style={{
+                      padding: '10px 12px', cursor: 'pointer', fontSize: 13.5, color: '#7c3aed',
+                      fontWeight: 700, background: '#faf5ff', display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#f3e8ff'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#faf5ff'}
+                  >
+                    <UserPlus size={14} />
+                    {query.trim() ? `+ Naya customer "${query.trim()}" banayein` : '+ Naya customer banayein'}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -240,16 +727,13 @@ const cardBody   = { padding: '16px' };
 // ─── Main Booking Form ────────────────────────────────────────────────────────
 export default function NewBookingPage() {
   const router = useRouter();
-  const editId = null;  // Phase 4 = new only; edit wires in later
 
   const [bookingNo, setBookingNo] = useState('...');
   const [userRole,  setUserRole]  = useState('viewer');
-  const [userId,    setUserId]    = useState(null);
 
   // Booking card
   const [status,       setStatus]       = useState('None');
   const [cityId,       setCityId]       = useState('');
-  const [cities,       setCities]       = useState([]);
   const [bookingDate,  setBookingDate]  = useState(new Date().toISOString().slice(0, 10));
   const [deliveryDate, setDeliveryDate] = useState('');
   const [returningDate,setReturningDate]= useState('');
@@ -266,6 +750,14 @@ export default function NewBookingPage() {
   // Customer card
   const [customer, setCustomer] = useState(null);
 
+  // Auto-fill booking city from customer if empty
+  function handleSelectCustomer(c) {
+    setCustomer(c);
+    if (c?.city_id && !cityId) {
+      setCityId(c.city_id);
+    }
+  }
+
   // Items card
   const [items, setItems] = useState([emptyItem()]);
   const [deliveryWarning, setDeliveryWarning] = useState(false);
@@ -281,14 +773,12 @@ export default function NewBookingPage() {
   // Load initial data
   useEffect(() => {
     async function init() {
-      const [session, nextNo, citiesRes] = await Promise.all([
+      const [session, nextNo] = await Promise.all([
         window.electronAPI?.auth.session(),
         window.electronAPI?.bookings.nextNo(),
-        window.electronAPI?.lists.get('cities'),
       ]);
-      if (session?.ok) { setUserRole(session.user.role); setUserId(session.user.id); }
+      if (session?.ok) { setUserRole(session.user.role); }
       if (nextNo?.ok) setBookingNo(nextNo.booking_no);
-      if (citiesRes?.ok) setCities(citiesRes.data || []);
     }
     init();
   }, []);
@@ -387,6 +877,12 @@ export default function NewBookingPage() {
   async function handleSave() {
     if (saving || saved || isViewer) return;
     setError('');
+
+    if (!customer?.id) {
+      setError('Customer select karna zaroori hai. Pehle customer search karein ya "Naya Customer" par click karein.');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -419,7 +915,6 @@ export default function NewBookingPage() {
       if (!res?.ok) { setError(res?.message || 'Save failed.'); return; }
       try { localStorage.removeItem('ifrah_booking_draft'); } catch {}
       setSaved(true);
-      // Redirect to bookings list after short delay
       setTimeout(() => router.push('/bookings'), 800);
     } catch (e) {
       setError(e.message || 'Something went wrong.');
@@ -457,7 +952,7 @@ export default function NewBookingPage() {
         </Link>
       </div>
 
-      <div className="page-body" style={{ maxWidth: 860 }}>
+      <div className="page-body" style={{ maxWidth: 880 }}>
         {/* Unsaved draft notification */}
         {hasDraft && (
           <div style={{
@@ -497,13 +992,16 @@ export default function NewBookingPage() {
                   )}
                 </select>
               </div>
-              {/* City */}
+              {/* City (Learning Combobox) */}
               <div>
                 <label style={labelStyle}>City</label>
-                <select className="form-input form-select" value={cityId} onChange={e => setCityId(e.target.value)} disabled={isViewer}>
-                  <option value="">City select karein...</option>
-                  {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <LearningCombobox
+                  tableName="cities"
+                  value={cityId}
+                  onChange={setCityId}
+                  placeholder="City select ya type karein..."
+                  disabled={isViewer}
+                />
               </div>
               {/* Booking Month (read-only) */}
               <div>
@@ -549,42 +1047,12 @@ export default function NewBookingPage() {
           </div>
         </div>
 
-        {/* ── CARD 2: Customer ──────────────────────────────────────── */}
-        <div style={cardStyle}>
-          <div style={cardHdr}>
-            <User size={16} color="#7c3aed" />
-            <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>Customer</span>
-            {!customer && !isViewer && (
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>
-                Existing customer choose karein ya naam type karke naya banayein
-              </span>
-            )}
-          </div>
-          <div style={cardBody}>
-            <CustomerPicker
-              value={customer?.id}
-              valueName={customer?.name}
-              onSelect={setCustomer}
-              disabled={isViewer}
-            />
-            {customer && (
-              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 13 }}>
-                <div style={{ background: '#f8fafc', padding: '8px 10px', borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Phone</div>
-                  <div style={{ fontFamily: 'monospace', fontWeight: 700 }}>{customer.phone || '—'}</div>
-                </div>
-                <div style={{ background: '#f8fafc', padding: '8px 10px', borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>CNIC</div>
-                  <div style={{ fontFamily: 'monospace', fontWeight: 700 }}>{customer.cnic || '—'}</div>
-                </div>
-                <div style={{ background: '#f8fafc', padding: '8px 10px', borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Previous Bookings</div>
-                  <div style={{ fontWeight: 700 }}>{customer.booking_count ?? '—'}</div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        {/* ── CARD 2: Customer (Search + Inline New Customer Creation) ── */}
+        <CustomerCard
+          customer={customer}
+          onSelectCustomer={handleSelectCustomer}
+          disabled={isViewer}
+        />
 
         {/* ── CARD 3: Dresses ───────────────────────────────────────── */}
         <div style={cardStyle}>

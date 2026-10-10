@@ -16,6 +16,7 @@
 const { withAudit }     = require('../auth/audit');
 const { requireRole, ROLES } = require('../auth/roles');
 const { normalizeName } = require('../domain/normalize');
+const { validateCustomer } = require('../domain/customerValidation');
 
 // CNIC format: 00000-0000000-0  (13 digits)
 const CNIC_RE = /^\d{5}-\d{7}-\d$/;
@@ -125,8 +126,10 @@ function createCustomersService(db) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER]);
     const user = session.user;
 
-    validateCnic(input.cnic);
-    validateCnic(input.relative_cnic, 'Relative CNIC');
+    const { isValid, errors } = validateCustomer(input, { isRequiredPhone: false });
+    if (!isValid) {
+      throw new Error(Object.values(errors).join(' '));
+    }
 
     const result = withAudit(db, user, 'customer.create', 'customers',
       r => r.lastInsertRowid,
@@ -162,8 +165,10 @@ function createCustomersService(db) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER]);
     const user = session.user;
 
-    validateCnic(input.cnic);
-    validateCnic(input.relative_cnic, 'Relative CNIC');
+    const { isValid, errors } = validateCustomer(input, { isRequiredPhone: false });
+    if (!isValid) {
+      throw new Error(Object.values(errors).join(' '));
+    }
 
     const old = get(session, id);
     if (!old) throw new Error('Customer not found.');
