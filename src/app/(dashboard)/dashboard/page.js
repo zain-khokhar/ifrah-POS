@@ -61,13 +61,14 @@ const STATUS_MAP = {
 // ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [user, setUser]               = useState(null);
+  const [user, setUser]               = useState(() => {
+    if (typeof window === 'undefined') return null;
+    const stored = localStorage.getItem('ifrah_user');
+    return stored ? JSON.parse(stored) : null;
+  });
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    const stored = localStorage.getItem('ifrah_user');
-    if (stored) setUser(JSON.parse(stored));
-
     const t = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(t);
   }, []);

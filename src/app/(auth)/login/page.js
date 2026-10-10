@@ -1,39 +1,35 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Lock, User, AlertCircle, Sparkles, BookOpen, Users, Shirt, CreditCard, BarChart2 } from 'lucide-react';
-
-/**
- * Phase 0 — Mock users (will be replaced with SQLite in Phase 1)
- * Credentials stored locally so the app works fully offline.
- */
-const MOCK_USERS = [
-  { username: 'owner',   password: 'owner123',   name: 'Shop Owner',  role: 'owner'   },
-  { username: 'cashier', password: 'cashier123', name: 'Ali Cashier', role: 'cashier' },
-  { username: 'viewer',  password: 'viewer123',  name: 'Viewer',      role: 'viewer'  },
-];
 
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername]         = useState('');
   const [password, setPassword]         = useState('');
+  const [fullName, setFullName]         = useState('Zain');
+  const [needsSetup, setNeedsSetup]     = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError]               = useState('');
   const [loading, setLoading]           = useState(false);
+
+  useEffect(() => {
+    window.electronAPI?.auth.needsSetup().then(result => setNeedsSetup(result.needsSetup));
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    // Simulate async delay (will be real SQLite query in Phase 1)
-    await new Promise(r => setTimeout(r, 500));
+    const result = needsSetup
+      ? await window.electronAPI.auth.setupOwner({ username, password, fullName })
+      : await window.electronAPI.auth.login({ username, password });
 
-    const user = MOCK_USERS.find(
-      u => u.username === username.trim() && u.password === password
-    );
-
-    if (user) {
+    if (result.ok !== false) {
+      const user = needsSetup
+        ? { username: username.trim().toLowerCase(), name: fullName.trim(), role: 'owner' }
+        : result.user;
       localStorage.setItem('ifrah_user', JSON.stringify({
         username:  user.username,
         name:      user.name,
@@ -42,16 +38,10 @@ export default function LoginPage() {
       }));
       router.push('/dashboard');
     } else {
-      setError('Username ya password galat hai. Dobara try karein.');
+      setError(result.message || 'Username ya password galat hai. Dobara try karein.');
     }
 
     setLoading(false);
-  };
-
-  const fillDemo = (u) => {
-    setUsername(u.username);
-    setPassword(u.password);
-    setError('');
   };
 
   return (
@@ -131,10 +121,10 @@ export default function LoginPage() {
       <div className="login-right">
         <div style={{ width: '100%' }}>
           <h2 style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', margin: '0 0 4px', letterSpacing: '-0.4px' }}>
-            Welcome Back
+            {needsSetup ? 'Owner Account Banayein' : 'Welcome Back'}
           </h2>
           <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 32px' }}>
-            Apna account login karein
+            {needsSetup ? 'Pehli dafa app setup karein' : 'Apna account login karein'}
           </p>
 
           {/* Error Alert */}
@@ -169,6 +159,20 @@ export default function LoginPage() {
                 />
               </div>
             </div>
+
+            {needsSetup && (
+              <div className="form-group">
+                <label className="form-label">Owner Name</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  required
+                  autoComplete="name"
+                />
+              </div>
+            )}
 
             {/* Password */}
             <div className="form-group">
@@ -210,48 +214,11 @@ export default function LoginPage() {
                     borderTopColor: 'white',
                     animation: 'spin 0.7s linear infinite',
                   }} />
-                  Login ho raha hai...
+                  {needsSetup ? 'Account ban raha hai...' : 'Login ho raha hai...'}
                 </>
-              ) : 'Login Karein →'}
+              ) : needsSetup ? 'Owner Account Banayein' : 'Login Karein →'}
             </button>
           </form>
-
-          {/* Demo Credentials */}
-          <div style={{
-            marginTop: 28, padding: '14px 16px',
-            background: '#f8fafc', borderRadius: 10,
-            border: '1px solid #e2e8f0',
-          }}>
-            <p style={{ fontSize: 10.5, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 10px' }}>
-              Demo Accounts (Phase 0)
-            </p>
-            {MOCK_USERS.map(u => (
-              <div key={u.username}
-                onClick={() => fillDemo(u)}
-                style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  fontSize: 12.5, color: '#64748b',
-                  padding: '5px 8px', borderRadius: 6,
-                  cursor: 'pointer', marginBottom: 3,
-                  transition: 'background 0.1s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              >
-                <span>
-                  <strong style={{ color: '#475569' }}>{u.username}</strong>
-                  {' '}/ {u.password}
-                </span>
-                <span className={`badge ${u.role === 'owner' ? 'badge-purple' : u.role === 'cashier' ? 'badge-info' : 'badge-gray'}`}
-                  style={{ fontSize: 10, padding: '2px 7px' }}>
-                  {u.role}
-                </span>
-              </div>
-            ))}
-            <p style={{ fontSize: 10.5, color: '#94a3b8', margin: '8px 0 0', fontStyle: 'italic' }}>
-              Click karo to auto-fill • Phase 1 mein SQLite se real login hoga
-            </p>
-          </div>
         </div>
       </div>
 

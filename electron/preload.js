@@ -22,13 +22,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: () => ipcRenderer.invoke('app:maximize'),
   close:    () => ipcRenderer.invoke('app:close'),
 
-  // ── Database (Phase 1 — SQLite) ───────────────────────────────────────────
-  // These will be implemented when SQLite is set up in Phase 1.
-  // Defined here so the UI can call them safely without crashing.
-  db: {
-    query: (sql, params = []) => ipcRenderer.invoke('db:query', sql, params),
-    run:   (sql, params = []) => ipcRenderer.invoke('db:run',   sql, params),
-    all:   (sql, params = []) => ipcRenderer.invoke('db:all',   sql, params),
-    get:   (sql, params = []) => ipcRenderer.invoke('db:get',   sql, params),
+  auth: {
+    needsSetup: () => ipcRenderer.invoke('auth:needs-setup'),
+    setupOwner: (input) => ipcRenderer.invoke('auth:setup-owner', input),
+    login: (input) => ipcRenderer.invoke('auth:login', input),
+    logout: () => ipcRenderer.invoke('auth:logout'),
+    session: () => ipcRenderer.invoke('auth:session'),
+  },
+  users: {
+    list: () => ipcRenderer.invoke('users:list'),
+    create: (input) => ipcRenderer.invoke('users:create', input),
+    disable: (userId) => ipcRenderer.invoke('users:disable', userId),
+  },
+  audit: {
+    list: () => ipcRenderer.invoke('audit:list'),
   },
 });

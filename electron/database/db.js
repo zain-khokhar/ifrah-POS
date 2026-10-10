@@ -10,6 +10,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const { app } = require('electron');
+const { SCHEMA_STATEMENTS } = require('./schema');
 
 let _db = null;
 
@@ -40,6 +41,8 @@ function getDb() {
   _db.pragma('foreign_keys = ON');    // Enforce FK constraints
   _db.pragma('synchronous = NORMAL'); // Good balance of speed and safety
   _db.pragma('temp_store = MEMORY'); // Temp tables in memory
+
+  for (const statement of SCHEMA_STATEMENTS) _db.exec(statement);
 
   return _db;
 }

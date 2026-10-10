@@ -1,11 +1,6 @@
 'use client';
-import { UserCog, Plus, Shield, Eye, Edit, Trash2 } from 'lucide-react';
-
-const MOCK_USERS = [
-  { id: 1, name: 'Shop Owner',  username: 'owner',   role: 'owner',   lastLogin: '09 Oct 2026, 09:30 AM', status: 'active' },
-  { id: 2, name: 'Ali Cashier', username: 'cashier', role: 'cashier', lastLogin: '09 Oct 2026, 10:15 AM', status: 'active' },
-  { id: 3, name: 'Viewer',      username: 'viewer',  role: 'viewer',  lastLogin: '08 Oct 2026, 02:00 PM', status: 'active' },
-];
+import { useEffect, useState } from 'react';
+import { UserCog, Plus, Shield, Trash2 } from 'lucide-react';
 
 const ROLE_MAP = {
   owner:   { cls: 'badge-purple', label: 'Owner',   desc: 'Sab kuch kar sakta hai' },
@@ -28,6 +23,46 @@ const PERMISSIONS = [
 ];
 
 export default function UsersPage() {
+  const [users, setUsers] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [form, setForm] = useState({ username: '', fullName: '', password: '', role: 'cashier' });
+  const [message, setMessage] = useState('');
+  const currentUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('ifrah_user') || 'null') : null;
+
+  const load = async () => {
+    const [userResult, auditResult] = await Promise.all([
+      window.electronAPI.users.list(),
+      window.electronAPI.audit.list(),
+    ]);
+    if (userResult?.ok === false) setMessage(userResult.message);
+    else setUsers(userResult);
+    if (auditResult?.ok === false) setMessage(auditResult.message);
+    else setAuditLogs(auditResult);
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(load, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const createUser = async (event) => {
+    event.preventDefault();
+    const result = await window.electronAPI.users.create(form);
+    if (result?.ok === false) setMessage(result.message);
+    else {
+      setMessage('User add ho gaya.');
+      setForm({ username: '', fullName: '', password: '', role: 'cashier' });
+      load();
+    }
+  };
+
+  const disableUser = async (id) => {
+    if (!window.confirm('Is user ko disable karein?')) return;
+    const result = await window.electronAPI.users.disable(id);
+    setMessage(result?.ok === false ? result.message : 'User disable ho gaya.');
+    load();
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -35,9 +70,7 @@ export default function UsersPage() {
           <h1 className="page-title">Users</h1>
           <p className="page-subtitle">Staff accounts aur permissions manage karein</p>
         </div>
-        <button className="btn btn-primary">
-          <Plus size={15} /> Add User
-        </button>
+        {currentUser?.role === 'owner' && <button className="btn btn-primary" onClick={() => document.getElementById('new-user')?.scrollIntoView()}><Plus size={15} /> Add User</button>}
       </div>
 
       <div className="page-body">
@@ -49,7 +82,7 @@ export default function UsersPage() {
               <div className="card-header">
                 <h2 className="card-title">Staff Accounts</h2>
               </div>
-              {MOCK_USERS.map(u => {
+              {users.map(u => {
                 const role = ROLE_MAP[u.role];
                 return (
                   <div key={u.id} style={{
@@ -70,22 +103,30 @@ export default function UsersPage() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{u.name}</div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>@{u.username} • Last: {u.lastLogin}</div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>@{u.username} • {u.is_active ? 'Active' : 'Disabled'}</div>
                     </div>
                     <span className={`badge ${role.cls}`}>{role.label}</span>
                     <div style={{ display: 'flex', gap: 5 }}>
-                      <button className="btn-icon" title="Edit"><Edit size={13} /></button>
-                      {u.role !== 'owner' && (
-                        <button className="btn-icon" title="Delete" style={{ color: '#ef4444' }}><Trash2 size={13} /></button>
+                      {u.role !== 'owner' && u.is_active && currentUser?.role === 'owner' && (
+                        <button className="btn-icon" title="Disable user" onClick={() => disableUser(u.id)} style={{ color: '#ef4444' }}><Trash2 size={13} /></button>
                       )}
                     </div>
                   </div>
                 );
               })}
-              <div style={{ padding: '10px 16px', fontSize: 12, color: '#94a3b8' }}>
-                Phase 2 mein real auth aayega
-              </div>
+              {message && <div style={{ padding: '10px 16px', fontSize: 12, color: '#b45309' }}>{message}</div>}
             </div>
+
+            {currentUser?.role === 'owner' && <form id="new-user" className="card" onSubmit={createUser} style={{ marginTop: 16 }}>
+              <div className="card-header"><h2 className="card-title">Add User</h2></div>
+              <div className="card-body">
+                {[['fullName', 'Name'], ['username', 'Username'], ['password', 'Password']].map(([key, label]) => (
+                  <div className="form-group" key={key}><label className="form-label">{label}</label><input className="form-input" type={key === 'password' ? 'password' : 'text'} value={form[key]} onChange={event => setForm({ ...form, [key]: event.target.value })} required /></div>
+                ))}
+                <div className="form-group"><label className="form-label">Role</label><select className="form-input" value={form.role} onChange={event => setForm({ ...form, role: event.target.value })}><option value="cashier">Cashier</option><option value="viewer">Viewer</option></select></div>
+                <button className="btn btn-primary" type="submit"><Plus size={14} /> Add User</button>
+              </div>
+            </form>}
           </div>
 
           {/* Permissions Matrix */}
@@ -121,6 +162,13 @@ export default function UsersPage() {
             </div>
           </div>
         </div>
+
+        {currentUser?.role === 'owner' && <div className="card" style={{ marginTop: 16 }}>
+          <div className="card-header"><h2 className="card-title">Audit Log</h2></div>
+          <table className="data-table"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Table</th><th>Record</th><th>Changes</th></tr></thead><tbody>
+            {auditLogs.map(log => <tr key={log.id}><td>{log.created_at}</td><td>{log.username || 'System'}</td><td>{log.action}</td><td>{log.table_name}</td><td>{log.record_id || '-'}</td><td>{log.new_values || '-'}</td></tr>)}
+          </tbody></table>
+        </div>}
       </div>
     </div>
   );

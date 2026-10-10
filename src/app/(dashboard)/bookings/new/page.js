@@ -154,7 +154,7 @@ export default function NewBookingPage() {
                   <div className="empty-state" style={{ padding: '28px' }}>
                     <div className="empty-state-icon"><Shirt size={24} /></div>
                     <h3 style={{ fontSize: 14 }}>Koi dress add nahi hui</h3>
-                    <p style={{ fontSize: 12.5 }}>Upar "Add Dress" click kar ke dress catalogue se dress select karein</p>
+                    <p style={{ fontSize: 12.5 }}>Upar &quot;Add Dress&quot; click kar ke dress catalogue se dress select karein</p>
                   </div>
                 </td>
               </tr>

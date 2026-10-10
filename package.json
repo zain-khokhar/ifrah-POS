@@ -6,13 +6,14 @@
   "main": "electron/main.js",
   "scripts": {
     "dev:next":     "next dev --turbopack",
-    "dev:electron": "wait-on http://localhost:3000 && electron .",
+    "dev:electron": "set ELECTRON_DEV=1&& wait-on http://localhost:3000 && electron .",
     "dev":          "concurrently --kill-others \"npm run dev:next\" \"npm run dev:electron\"",
-    "build":        "ELECTRON_BUILD=1 next build",
+    "build":        "set ELECTRON_BUILD=1&& next build",
     "build:win":    "npm run build && electron-builder --win",
     "start":        "next start",
     "lint":         "eslint src",
-    "typecheck":    "echo \"TypeScript check skipped (JS project)\""
+    "typecheck":    "echo \"TypeScript check skipped (JS project)\"",
+    "test":         "node --test electron/**/*.test.js"
   },
   "dependencies": {
     "next":         "16.4.0",

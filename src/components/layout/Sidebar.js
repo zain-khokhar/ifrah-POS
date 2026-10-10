@@ -6,7 +6,7 @@ import {
   CreditCard, Truck, RotateCcw, BarChart2,
   UserCog, Settings, Database, Plus, LogOut, Sparkles,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 const mainNav = [
   { label: 'Dashboard',  href: '/dashboard',  icon: LayoutDashboard },
@@ -34,19 +34,19 @@ const roleColors = {
 export default function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
+  const [user] = useState(() => {
+    if (typeof window === 'undefined') return null;
     const stored = localStorage.getItem('ifrah_user');
-    if (stored) setUser(JSON.parse(stored));
-  }, []);
+    return stored ? JSON.parse(stored) : null;
+  });
 
   const isActive = (href) => {
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname.startsWith(href);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await window.electronAPI?.auth.logout();
     localStorage.removeItem('ifrah_user');
     router.push('/login');
   };
