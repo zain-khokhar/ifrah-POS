@@ -1,0 +1,126 @@
+Ifrah Collection POS – Developer ke liye Requirements (Roman Urdu)
+Oct 9, 2026 · @BARII
+Maqsad aur Daira-e-Kaar
+Ifrah Collection (dress rental shop) ke liye aisa POS banana hai jo mojooda Microsoft Access file (Ifra Collection - Copy (40).accdb) ki jagah le aur uske tamam kaam karne wale features barqarar rakhe: dress items ke saath bookings, advance aur baqi payment, double-booking warning, search, reports aur printed receipts.
+Access system mein abhi 359 bookings aur 368 booking line items hain (Jan–Oct 2026), aur sirf do tables hain. Isme dress inventory, payment history, user login aur stock/availability screen nahi hai. POS mein yeh sab shamil karna hai.
+Phase 1 mein shamil: booking/rental sales, customers, dress catalogue aur availability, payments, delivery aur return tracking, receipts, reports, user roles, data migration.
+Phase 1 se bahar: online storefront, accounting software integration, SMS ya WhatsApp bhejna (phase 2 mein optional).
+Users aur Roles
+Access file mein abhi login nahi hai. POS mein teen roles chahiye:
+Role	Kya kar sakta hai
+Owner	Sab kuch, jisme delete, price change, reports, user management, backup shamil hain
+Cashier	Booking banana aur edit karna, payment lena, receipt print karna, delivery aur return mark karna; delete nahi kar sakta aur profit reports nahi dekh sakta
+Viewer	Sirf search aur dekhna
+Har create, edit aur delete user aur waqt ke saath log hoga.
+Functional Requirements
+Priority: M = phase 1 mein lazmi, S = hona chahiye, C = baad mein ho sakta hai.
+Booking
+ID	Requirement	Priority
+F1	Booking banana: city, status (None / Open / Closed / Pending), month, booking date, delivery date, returning date, customer, relative, notes. Booking ID khud ba khud banegi	M
+F2	Har booking mein ek ya zyada dress lines: dress, size, quantity, rate, description, aur accessories ki ginti (jewellery, clutch purse, hand bag, double dupatta, shoes)	M
+F3	Line total = quantity × rate. Booking ka grand total = tamam line totals ka jama, khud ba khud update ho (alag "Calculate Invoice" button ki zaroorat nahi)	M
+F4	Mojooda booking ka duplicate banana; save, undo aur delete (delete sirf owner)	M
+F5	Month, booking date se nikalta hai, haath se type nahi hota	M
+F6	Total returning days = returning date aur delivery date ka absolute farq, khud ba khud calculate ho	M
+Customers
+ID	Requirement	Priority
+F7	Customer record: name, relation/father ka naam, contact 1, contact 2, CNIC, relative CNIC, address, city, cast. Ek customer ko kai bookings mein dobara istemal kar sakein	M
+F8	Phone text ki surat mein save ho taake shuru ka zero na jaye; CNIC format 00000-0000000-0 validate ho	M
+F9	Booking screen se hi nayi city ya cast add karna (jo "not in list" prompt ki jagah le)	M
+Dress Catalogue aur Availability
+ID	Requirement	Priority
+F10	Dress master list: code, name, size, category, rental rate, photo, active flag. Dress ka naam list se chunna hoga, type nahi karna	M
+F11	Availability check: jab booking mein dress add ho, to warning aaye agar wahi dress kisi aur booking mein usi delivery date (ya delivery se return tak overlap hone wali muddat) ke liye booked ho aur wo booking Closed na ho. Cashier confirmation ke saath override kar sakta hai	M
+F12	Har dress ka availability calendar aur ek screen jo chuni hui date par khali dresses dikhaye	S
+Payments
+ID	Requirement	Priority
+F13	Booking ke against payments record karna: date, amount, method (cash / bank / wallet), received by. Advance pehli payment hai	M
+F14	Remaining = grand total − tamam payments ka jama, hamesha calculate ho, kabhi type na ho	M
+F15	Har booking par optional security deposit, jo return par wapas ho	S
+Delivery aur Return
+ID	Requirement	Priority
+F16	Delivered aur returned mark karna, date aur condition ya damage ke note ke saath; overdue returns dikhana	M
+F17	Booking ka status badalna; Closed ka matlab: delivered, returned aur poori payment ho chuki	M
+Search aur Filter
+ID	Requirement	Priority
+F18	Ek search box jo booking ID, customer name, relative name, contact numbers, CNIC, city, cast aur dress name par search kare	M
+F19	Filters: status, month, date range (booking, delivery ya returning date ke hisab se), khaas field; aur ek Clear All button	M
+F20	Apostrophe ya dusre special characters wala search text kabhi error na de	M
+Access System ke Business Rules
+Yeh rules mojooda VBA aur table design mein hain aur POS mein bilkul isi tarah kaam karne chahiye.
+•	Detail ID = booking ID ke baad 2-digit line counter (booking 47, pehli line → 4701).
+•	Double booking warning: wahi dress, wahi delivery date, doosri booking → warning "already booked in Booking ID X", jisme Yes/No ho continue karne ke liye.
+•	Pehle delivery date: jab tak booking mein delivery date na ho, dress add nahi ho sakta.
+•	Grand total = booking ki tamam line totals ka jama.
+•	Remaining amount: purane system mein agar advance 0 ho to remaining 0 hota hai; agar advance 0 se zyada ho to remaining = grand total − advance. Owner ko confirm karna hai ke POS mein hamesha grand total − payments dikhana hai ya nahi (yehi recommended hai, F14 dekhein).
+•	Status values: None, Open, Closed, Pending. Default None hai.
+•	Closed bookings dress report ke dress-clash highlight mein nazar andaz hoti hain.
+•	Receipt sirf screen par maujood booking ki khulti hai, aur record save hone ke baad hi.
+•	Report filters wahi search aur filter values istemal karte hain jo booking screen par hain.
+Data Model
+Purani file mein Bookings (customer aur booking mix) aur Booking Details hain. POS isay neeche diye tables mein todta hai. Aakhri column batata hai ke har field kahan se aati hai.
+Table	Aham fields	Access mein kahan se
+customers	id, name, relation name, contact 1, contact 2 (text), CNIC, relative CNIC, address, city, cast	Bookings: Customer Name, Relation Name, Contact No 1/2, Customer CNIC, Relative CNIC, Address, City, Cast
+bookings	id, customer id, status, booking date, delivery date, returning date, total returning days (calculated), month (calculated), grand total (calculated), created by, created at	Bookings: Booking ID, Open/Close, Booking Date, Delivery Date, Returning Date, Total Returning Date, Month, Grand Total
+booking_items	id (purani Detail ID), booking id, dress id, size, quantity, rate, line total, description, jewellery, clutch purse, hand bag, double dupatta, shoes	Booking Details: tamam fields
+dresses	id, code, name, size, category, rate, photo, active	Naya. Booking Details ki alag-alag Dress Name values se seed karein
+payments	id, booking id, date, amount, method, received by, note	Naya. Har booking ke Advance Amount se ek payment seed karein
+cities, casts	id, name	Nayi lists. City aur Cast ki value lists se seed karein
+users	id, name, role, password hash	Naya
+audit_log	id, user, action, table, record id, time	Naya
+Rishte: ek customer ki kai bookings; ek booking ke kai items aur kai payments; ek dress kai booking items mein aata hai. Booking delete hone par uske items bhi delete ho jate hain (cascade).
+Receipts aur Reports
+Output	Content	Priority
+Booking receipt	Shop ka naam, booking ID, customer, contact, CNIC, dates (booking, delivery, returning), dress lines size, quantity, rate, line total aur accessories ki ginti ke saath, grand total, mili hui payments, remaining. A4 aur 80 mm thermal printer par print ho; PDF export	M
+Customer report (BDRCustomer ki jagah)	Booking ID, booking/delivery/returning dates, customer, contact, CNIC, status, grand total, advance, remaining. Footer: har money column ka total aur bookings ki ginti	M
+Only-customer report (BDROnlyCustomer ki jagah)	City, month, total days, customer, relation name, status	S
+Dress report (BDRDress ki jagah)	Har booking ki dress lines accessories ke saath; wo dress highlight ho jo kisi doosri non-closed booking mein usi delivery date par booked ho	M
+Daily cash report	Har din, har method ke hisab se mili hui payments	S
+Outstanding balance report	Wo bookings jinki remaining 0 se zyada hai, purani delivery date pehle	S
+Overdue returns	Delivered, wapas nahi aaye, returning date guzar chuki	M
+Tamam reports search screen ke filters ko follow karti hain aur PDF aur Excel mein export hoti hain.
+Non-Functional Requirements
+•	Platform: developer ki marzi (desktop, web ya dono), lekin aam shop PC par chalna chahiye aur receipt printer ke saath kaam karna chahiye. Kaam shuru karne se pehle chuna hua stack aur hosting bata dein.
+•	Offline: agar internet chala jaye to shop ka kaam chalta rahe; internet wapas aane par data sync ho (agar web ya cloud design chuna jaye).
+•	Speed: 5,000 bookings ke saath search ke nateeje 2 second se kam mein aayein.
+•	Zaban: screens English mein; naam, address aur notes mein Urdu text qabool ho aur receipts par print bhi ho.
+•	Security: har user ka login, hashed passwords, har action par role check, audit log.
+•	Backup: roz automatic backup, aur owner ke liye ek click mein restore.
+•	Input safety: tamam searches aur saves parameterised queries se hon; user ka text jod kar SQL na banayein.
+•	Usability: main booking screen par Access form ke barabar hi clicks hon; save, new, search aur print ke liye keyboard shortcuts.
+•	Documentation: mukhtasar user guide aur source code aur database schema ki handover.
+Data Migration
+Tamam 359 bookings aur 368 booking lines wahi Booking IDs (47–411) aur Detail IDs ke saath import honi chahiyen. Purane data mein booking totals apni lines ke jama ke barabar hain, is liye import ko row by row check kiya ja sakta hai.
+•	Bookings aur Booking Details .accdb file se (ya dono tables ke Excel/CSV export se) import karein.
+•	Har booking se customer fields nikaal kar customers table mein daalein. Wahi naam aur contact number wale customers ko merge karein.
+•	Phone aur CNIC ko numbers se text mein badlein. Purani file inhe bade numbers ki tarah save karti hai, is liye shuru ka zero pehle hi ja chuka hai; owner sahi format confirm kare (maslan 03xx-xxxxxxx).
+•	Har booking ke Advance Amount se ek payment banayein, booking date par.
+•	Dress list Booking Details ki alag Dress Name values se banayein; import se pehle owner duplicates aur spelling saaf kare.
+•	Remaining Amount import na karein: yeh 243 purani rows mein grand total − advance se mukhtalif hai. POS ise dobara calculate karega.
+•	Import ke baad reconciliation dikhayein: bookings ki ginti, lines ki ginti, grand totals ka jama (purana total 789,801), aur wo rows jo fail hui.
+Wo Kamiyan Jo Dohrani Nahi Hain, Phases aur Acceptance
+Access system mein mili kamiyan
+•	City aur cast ki lists "Booking" naam ke table se parhti hain jo maujood hi nahi, is liye nayi city ya cast add karna fail ho jata hai.
+•	Dress ke naam free text hain, is liye ek hi dress kai spellings mein likha ja sakta hai aur clash check usay miss kar deta hai.
+•	Report aur form ke filters objects ke andar save ho gaye the (maslan [Booking ID] IN (406)), jis se records chhup jate the jab tak clear na kiye jayen.
+•	Remaining amount haath se likha jata tha aur bohat si rows mein ghalat hai.
+•	Month haath se type hota tha aur booking date se mukhtalif ho sakta hai.
+•	Phone aur CNIC numbers ki surat mein save hue, is liye leading zeros zaya ho gaye.
+•	359 mein se 356 bookings mein Cast khali hai; faisla karein ke yeh field rakhna hai ya nahi.
+Phases
+Phase	Content
+1	Login aur roles, customers, dress catalogue, items ke saath bookings, availability check, payments, receipt print, search aur filters, migration
+2	Delivery aur return tracking overdue list ke saath, reports, backup aur restore, audit log
+3	Optional: SMS ya WhatsApp reminders, receipt par dress photos, dashboard
+Acceptance criteria
+•	Cashier 3 dress lines wali booking bana sake, advance le, receipt print kare aur bina kisi haath ke hisab ke sahi remaining amount dekhe.
+•	Aisi dress add karne par jo usi delivery date par pehle se booked ho, clash warning doosri booking ID ke saath nazar aaye.
+•	Apostrophe wale naam ka search sahi kaam kare.
+•	Migration reconciliation 359 bookings, 368 lines aur purane grand total jama 789,801 se match kare.
+•	Har role sirf wahi kaam kar sake jo roles table mein likha hai.
+Owner se sawalat
+•	Desktop, web ya dono? Kya shop mein internet hamesha rehta hai?
+•	Kaunsa printer: A4, 80 mm thermal, ya dono?
+•	Kya dress clash delivery aur return ke darmiyan ki dates ko bhi block kare, ya sirf wahi delivery date jaisa abhi hai?
+•	Kya security deposit liya jata hai? Kya kabhi rental discount diya jata hai?
+•	Ek waqt mein kitni shops ya counters yeh system istemal karenge?

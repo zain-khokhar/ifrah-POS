@@ -1,0 +1,61 @@
+{
+  "name": "ifrah-pos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ifrah Collection — Offline-First Dress Rental POS System",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev:next":     "next dev --turbopack",
+    "dev:electron": "wait-on http://localhost:3000 && electron .",
+    "dev":          "concurrently --kill-others \"npm run dev:next\" \"npm run dev:electron\"",
+    "build":        "ELECTRON_BUILD=1 next build",
+    "build:win":    "npm run build && electron-builder --win",
+    "start":        "next start",
+    "lint":         "eslint src",
+    "typecheck":    "echo \"TypeScript check skipped (JS project)\""
+  },
+  "dependencies": {
+    "next":         "16.4.0",
+    "react":        "19.3.0",
+    "react-dom":    "19.3.0",
+    "react-hook-form":      "^7.0.0",
+    "zod":                  "^3.0.0",
+    "@hookform/resolvers":  "^3.0.0",
+    "lucide-react":         "^0.469.0",
+    "clsx":                 "^2.0.0",
+    "uuid":                 "^11.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "^4",
+    "babel-plugin-react-compiler": "1.0.0",
+    "better-sqlite3":   "^11.0.0",
+    "concurrently":     "^9.0.0",
+    "electron":         "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "eslint":           "^9",
+    "eslint-config-next": "16.4.0",
+    "tailwindcss":      "^4",
+    "wait-on":          "^8.0.0"
+  },
+  "build": {
+    "appId":       "com.ifrahcollection.pos",
+    "productName": "Ifrah Collection POS",
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick":           false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "files": [
+      "out/**/*",
+      "electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  }
+}
