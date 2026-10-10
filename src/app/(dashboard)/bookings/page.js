@@ -4,8 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   BookOpen, Plus, Search, X, RefreshCw,
-  Edit, Trash2, Eye, Filter,
+  Edit, Trash2, Eye, Filter, Printer,
 } from 'lucide-react';
+import ReceiptModal from '@/components/ReceiptModal';
+
 
 const STATUS_CHIP = {
   None:    { bg: '#f1f5f9', color: '#64748b', label: 'None'    },
@@ -30,6 +32,8 @@ export default function BookingsPage() {
   const [status,   setStatus]   = useState('');
   const [deleting, setDeleting] = useState(null);
   const [userRole, setUserRole] = useState('viewer');
+  const [printBookingId, setPrintBookingId] = useState(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const reloadRef = useRef(null);
 
   useEffect(() => {
@@ -162,6 +166,17 @@ export default function BookingsPage() {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 5 }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          title="Receipt Print / Reprint Karein"
+                          onClick={() => {
+                            setPrintBookingId(b.id);
+                            setShowReceiptModal(true);
+                          }}
+                        >
+                          <Printer size={11} /> Receipt
+                        </button>
                         {!isViewer && (
                           <Link href={`/bookings/new?id=${b.id}`} className="btn btn-secondary btn-sm">
                             <Edit size={11} /> Edit
@@ -194,6 +209,21 @@ export default function BookingsPage() {
           )}
         </div>
       </div>
+
+      {/* ── PHASE 8: RECEIPT MODAL ── */}
+      {showReceiptModal && printBookingId && (
+        <ReceiptModal
+          bookingId={printBookingId}
+          isOpen={showReceiptModal}
+          onClose={() => {
+            setShowReceiptModal(false);
+            setPrintBookingId(null);
+          }}
+          onPrintComplete={() => {
+            if (reloadRef.current) reloadRef.current();
+          }}
+        />
+      )}
     </div>
   );
 }

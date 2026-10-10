@@ -13,6 +13,8 @@ const { createPaymentsService } = require('./payments/service');
 const { createBackupService }   = require('./backup/service');
 const { createAvailabilityService } = require('./availability/service');
 const { createSearchService }   = require('./search/service');
+const { createSettingsService } = require('./settings/service');
+const { createReceiptsService } = require('./receipts/service');
 
 const isDev = process.env.ELECTRON_DEV === '1';
 const sessions = new Map();
@@ -25,6 +27,8 @@ let payments;
 let backup;
 let availability;
 let search;
+let settingsService;
+let receiptsService;
 let staticServer = null;
 
 function getSession(event) { return sessions.get(event.sender.id); }
@@ -193,6 +197,8 @@ app.whenReady().then(async () => {
   backup       = createBackupService(db, app, dialog, shell);
   availability = createAvailabilityService(db);
   search       = createSearchService(db);
+  settingsService = createSettingsService(db);
+  receiptsService = createReceiptsService(db, settingsService, bookings);
 
   seedDefaults();
 
@@ -303,6 +309,18 @@ ipcMain.handle('availability:logOverride',   safeHandler((event, params)  => ava
 // ─── IPC — Search (Phase 7) ─────────────────────────────────────────────────
 ipcMain.handle('search:query',  safeHandler((event, filters) => ({ ok: true, data: search.search(getSession(event), filters) })));
 ipcMain.handle('search:count',  safeHandler((event, filters) => ({ ok: true, ...search.count(getSession(event), filters) })));
+
+// ─── IPC — Settings (Phase 8) ───────────────────────────────────────────────
+ipcMain.handle('settings:get',    safeHandler((event)        => ({ ok: true, data: settingsService.getSettings(getSession(event)) })));
+ipcMain.handle('settings:update', safeHandler((event, input) => settingsService.updateSettings(getSession(event), input)));
+
+// ─── IPC — Receipts & Printing (Phase 8) ────────────────────────────────────
+ipcMain.handle('receipts:getData',      safeHandler((event, bookingId) => receiptsService.getReceiptData(getSession(event), bookingId)));
+ipcMain.handle('receipts:getPrinters',  safeHandler((event)            => ({ ok: true, data: receiptsService.getPrinters(getSession(event)) })));
+ipcMain.handle('receipts:generateHtml', safeHandler((event, params)    => receiptsService.generateHtml(getSession(event), params)));
+ipcMain.handle('receipts:print',        safeHandler((event, params)    => receiptsService.printDirect(getSession(event), params)));
+ipcMain.handle('receipts:savePdf',      safeHandler((event, params)    => receiptsService.savePdf(getSession(event), params)));
+ipcMain.handle('receipts:recordPrint',  safeHandler((event, bookingId) => receiptsService.recordPrint(getSession(event), bookingId)));
 
 // ─── IPC — App ─────────────────────────────────────────────────────────────
 ipcMain.handle('app:version',  safeHandler((event) => { protect(event, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]); return app.getVersion(); }));

@@ -10,8 +10,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Search, SlidersHorizontal, X, ChevronLeft, ChevronRight,
-  RefreshCw, AlertTriangle,
+  RefreshCw, AlertTriangle, Printer,
 } from 'lucide-react';
+import ReceiptModal from '@/components/ReceiptModal';
+
 
 const PAGE_SIZE = 100;
 
@@ -62,6 +64,8 @@ export default function SearchPage() {
   const [loading,  setLoading]  = useState(false);
   const [searched, setSearched] = useState(false);
   const [error,    setError]    = useState('');
+  const [printBookingId, setPrintBookingId] = useState(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
 
   const inputRef    = useRef(null);
   const searchTimer = useRef(null);
@@ -278,7 +282,7 @@ export default function SearchPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                  {['#', 'Booking', 'Customer', 'Dresses', 'Dates', 'Amount', 'Status'].map(h => (
+                  {['#', 'Booking', 'Customer', 'Dresses', 'Dates', 'Amount', 'Status', 'Action'].map(h => (
                     <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>
@@ -328,6 +332,19 @@ export default function SearchPage() {
                     <td style={{ padding: '10px 12px' }}>
                       <StatusBadge status={row.status} />
                     </td>
+                    <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        title="Receipt Print / Reprint Karein"
+                        onClick={() => {
+                          setPrintBookingId(row.id);
+                          setShowReceiptModal(true);
+                        }}
+                      >
+                        <Printer size={12} /> Receipt
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -361,6 +378,21 @@ export default function SearchPage() {
           </p>
           <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 8 }}>Tip: Ctrl+K se search bar focus hoga</p>
         </div>
+      )}
+
+      {/* ── PHASE 8: RECEIPT MODAL ── */}
+      {showReceiptModal && printBookingId && (
+        <ReceiptModal
+          bookingId={printBookingId}
+          isOpen={showReceiptModal}
+          onClose={() => {
+            setShowReceiptModal(false);
+            setPrintBookingId(null);
+          }}
+          onPrintComplete={() => {
+            runSearch(page);
+          }}
+        />
       )}
 
       <style jsx>{`

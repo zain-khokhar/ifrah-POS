@@ -189,6 +189,7 @@ const SCHEMA_STATEMENTS = [
     grand_total         INTEGER NOT NULL DEFAULT 0,       -- sum of line totals - discount
     amount_paid         INTEGER NOT NULL DEFAULT 0,       -- sum of valid rental payments
     remaining           INTEGER NOT NULL DEFAULT 0,       -- grand_total - amount_paid
+    receipt_print_count INTEGER NOT NULL DEFAULT 0,       -- Phase 8 reprint tracking
     created_by          INTEGER REFERENCES users(id),
     updated_by          INTEGER REFERENCES users(id),
     created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -322,6 +323,15 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_audit_logs_user      ON audit_logs(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_audit_logs_table     ON audit_logs(table_name, record_id)`,
   `CREATE INDEX IF NOT EXISTS idx_sync_outbox_status   ON sync_outbox(status)`,
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 14. SETTINGS (Shop details, receipt footer, printer layout defaults)
+  // ──────────────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS settings (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`,
 ];
 
 module.exports = { SCHEMA_STATEMENTS };

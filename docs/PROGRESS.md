@@ -1,5 +1,5 @@
 # Progress
-Current phase: 5
+Current phase: 8
 Last updated: 2026-10-10
 
 - [x] Phase 0  Decisions and setup
@@ -8,9 +8,9 @@ Last updated: 2026-10-10
 - [x] Phase 3  Lists, customers, dresses
 - [x] Phase 4  Booking screen
 - [x] Phase 5  Payments and status
-- [ ] Phase 6  Availability and clash
-- [ ] Phase 7  Search and filters
-- [ ] Phase 8  Receipts and printing
+- [x] Phase 6  Availability and clash
+- [x] Phase 7  Search and filters
+- [x] Phase 8  Receipts and printing
 - [ ] Phase 9  Delivery and return
 - [ ] Phase 10 Reports and exports
 - [ ] Phase 11 Access migration
@@ -84,7 +84,32 @@ Last updated: 2026-10-10
 
 ---
 
+## Phase 8 Implementation Status
+- **Receipts Engine (`electron/receipts/service.js`, `template.js` & IPC):**
+  - High-performance HTML/CSS generator with offline font support & proper page breaks (`page-break-inside: avoid`).
+  - **Two Professional Layouts:**
+    - **80mm Thermal POS:** compact, high-contrast, dotted dividers, optimized for receipt printers.
+    - **A4 Full Sheet:** elegant invoice layout with customer & shop signature rows.
+  - Full bilingual Urdu & English support with RTL text alignment for notes, names, and terms.
+  - Direct hardware print via Electron `webContents.print` with printer selection and copies support.
+  - Native PDF export via Electron `webContents.printToPDF` and Windows native Save As dialog.
+  - Automatic reprint detection: increments `receipt_print_count` in DB and marks subsequent prints with prominent **DUPLICATE COPY / نقل** badge.
+  - Audited printing: every print event is logged to `audit_logs` (`RECEIPT_PRINTED`).
+  - Rule 10 Enforcement: receipt button is disabled with tooltip *"Save the booking first"* until booking is saved.
+  - "Save & Print" button on booking form atomically saves and opens print preview.
+  - Reprint button integrated on Bookings list (`/bookings`) and Search results (`/search`).
+- **Settings & Hardware Preferences (`electron/settings/service.js` & `/settings` UI):**
+  - Persistent SQLite `settings` table with atomic upserts and audit logging.
+  - Configurable shop name, tagline, address, phone 1, phone 2, and city.
+  - Configurable Urdu & English return terms and policies.
+  - Layout default preference (80mm vs A4) and printer selection per layout.
+  - Toggle for "DUPLICATE / نقل" stamp on reprints.
+  - Settings page connected to real DB with Owner-only authorization guard.
+
+---
+
 ## Verification & Tests
-- `npm test`: **97 / 97 unit tests passed** (0 failures, 19 dedicated tests for Phase 5 payment ledger, voids, remaining math, closed status guards, and backup integrity).
+- `npm test`: **108 / 108 unit tests passed** (0 failures, 11 dedicated tests for Phase 8 templates, layouts, Urdu text, reprint counters, settings, and roles).
 - `npm run lint`: **0 errors, 0 warnings** (Clean ESLint check across all dashboard pages).
-- `npm run build`: **Compiled & exported successfully** across all 17 static routes via Next.js Turbopack.
+- `npm run build`: **Compiled & exported successfully** across all 19 static routes via Next.js Turbopack.
+

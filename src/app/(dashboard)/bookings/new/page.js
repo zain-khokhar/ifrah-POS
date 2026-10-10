@@ -9,6 +9,7 @@ import {
   CreditCard, Ban, CheckCircle, ShieldAlert, AlertTriangle,
 } from 'lucide-react';
 import { formatPakPhone, cnicMask, validateCustomer } from '@/lib/customerValidation';
+import ReceiptModal from '@/components/ReceiptModal';
 
 // ─── Date input (DD-MM-YYYY display, YYYY-MM-DD storage) ─────────────────────
 function DateInput({ value, onChange, placeholder, disabled, id }) {
@@ -908,6 +909,10 @@ export default function NewBookingPage() {
   const [clashWarnings, setClashWarnings]           = useState({});
   const [clashOverrideLoading, setClashOverrideLoading] = useState({});
 
+  // Phase 8: Receipt modal state
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptBookingId, setReceiptBookingId] = useState(null);
+
   // Reload booking and payments
   async function reloadBookingData(id) {
     const res = await window.electronAPI?.bookings.get(id);
@@ -1259,7 +1264,7 @@ export default function NewBookingPage() {
     return () => clearTimeout(t);
   }, [status, cityId, bookingDate, deliveryDate, returningDate, notes, customer, items, discount, saved, editBookingId]);
 
-  async function handleSave() {
+  async function handleSave(opts = {}) {
     if (saving || saved || isViewer) return;
     setError('');
 
@@ -1300,7 +1305,12 @@ export default function NewBookingPage() {
         const res = await window.electronAPI?.bookings.update(editBookingId, payload);
         if (!res?.ok) { setError(res?.message || 'Update failed.'); return; }
         setSaved(true);
-        setTimeout(() => router.push('/bookings'), 800);
+        if (opts?.andPrint) {
+          setReceiptBookingId(editBookingId);
+          setShowReceiptModal(true);
+        } else {
+          setTimeout(() => router.push('/bookings'), 800);
+        }
       } else {
         payload.advance_amount = parseInt(advanceAmount || 0, 10);
         payload.advance_method = advanceMethod;
@@ -1311,7 +1321,14 @@ export default function NewBookingPage() {
         if (!res?.ok) { setError(res?.message || 'Save failed.'); return; }
         try { localStorage.removeItem('ifrah_booking_draft'); } catch {}
         setSaved(true);
-        setTimeout(() => router.push('/bookings'), 800);
+        const newId = res.id;
+        setEditBookingId(newId);
+        if (opts?.andPrint) {
+          setReceiptBookingId(newId);
+          setShowReceiptModal(true);
+        } else {
+          setTimeout(() => router.push('/bookings'), 800);
+        }
       }
     } catch (e) {
       setError(e.message || 'Something went wrong.');
@@ -1351,9 +1368,26 @@ export default function NewBookingPage() {
               : 'Nayi dress rental booking register karein'}
           </p>
         </div>
-        <Link href="/bookings" className="btn btn-secondary">
-          <X size={14} /> Close
-        </Link>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={!editBookingId}
+            title={!editBookingId ? 'Save the booking first (Pehle booking save karein)' : 'Receipt Print / Preview Karein'}
+            onClick={() => {
+              if (editBookingId) {
+                setReceiptBookingId(editBookingId);
+                setShowReceiptModal(true);
+              }
+            }}
+            style={!editBookingId ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+          >
+            <Printer size={14} /> Receipt
+          </button>
+          <Link href="/bookings" className="btn btn-secondary">
+            <X size={14} /> Close
+          </Link>
+        </div>
       </div>
 
       <div className="page-body" style={{ maxWidth: 880 }}>
@@ -1821,10 +1855,30 @@ export default function NewBookingPage() {
             <Link href="/bookings" className="btn btn-secondary">
               Cancel
             </Link>
-            <button className="btn btn-secondary" onClick={handleSave} disabled={saving}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={!editBookingId}
+              title={!editBookingId ? 'Save the booking first (Pehle booking save karein)' : 'Receipt Print Karein'}
+              onClick={() => {
+                if (editBookingId) {
+                  setReceiptBookingId(editBookingId);
+                  setShowReceiptModal(true);
+                }
+              }}
+              style={!editBookingId ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+            >
+              <Printer size={14} /> Print Receipt
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => handleSave({ andPrint: true })}
+              disabled={saving}
+            >
               <Printer size={14} /> Save &amp; Print
             </button>
-            <button className="btn btn-primary" onClick={handleSave} disabled={saving || saved}
+            <button className="btn btn-primary" onClick={() => handleSave()} disabled={saving || saved}
               style={{ minWidth: 120 }}>
               {saved ? (
                 <><Check size={14} /> Saved!</>
@@ -2071,6 +2125,15 @@ export default function NewBookingPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── PHASE 8: RECEIPT MODAL ── */}
+      {showReceiptModal && (
+        <ReceiptModal
+          bookingId={receiptBookingId || editBookingId}
+          isOpen={showReceiptModal}
+          onClose={() => setShowReceiptModal(false)}
+        />
       )}
     </div>
   );

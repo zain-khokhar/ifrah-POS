@@ -121,6 +121,46 @@ function runMigrations(db) {
     if (rowCount('casts') === 0) emptyTablesToRecreate.push('casts');
   }
 
+  if (tableInfo('bookings').length > 0 && !hasCol('bookings', 'receipt_print_count')) {
+    try {
+      db.exec(`ALTER TABLE bookings ADD COLUMN receipt_print_count INTEGER NOT NULL DEFAULT 0;`);
+    } catch (e) {
+      console.warn('[DB] Could not add receipt_print_count:', e.message);
+    }
+  }
+
+  // Seed default settings if empty
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    )`);
+    const sCount = db.prepare('SELECT count(*) as c FROM settings').get()?.c || 0;
+    if (sCount === 0) {
+      const insert = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+      const defaults = [
+        ['shop_name', 'Ifrah Collection'],
+        ['shop_tagline', 'Exclusive Bridal & Party Wear'],
+        ['shop_address', 'Main Bazaar, Near Bank Alfalah'],
+        ['shop_phone', '0300-1234567'],
+        ['shop_phone2', '0321-7654321'],
+        ['shop_city', 'Lahore'],
+        ['receipt_footer_ur', 'واپسی پر ڈریس صاف اور درست حالت میں واپس کرنا لازمی ہے۔ تاخیر کی صورت میں یومیہ کرایہ وصول ہوگا۔'],
+        ['receipt_footer_en', 'Dress must be returned in good condition. Late return will incur daily rental charges.'],
+        ['receipt_default_layout', '80mm'],
+        ['receipt_reprint_watermark', '1'],
+        ['printer_80mm', ''],
+        ['printer_a4', ''],
+      ];
+      for (const [k, v] of defaults) {
+        insert.run(k, v);
+      }
+    }
+  } catch (err) {
+    console.warn('[DB] Settings init note:', err.message);
+  }
+
   if (emptyTablesToRecreate.length > 0) {
     db.pragma('foreign_keys = OFF');
     const order = ['booking_items', 'payments', 'bookings', 'dresses', 'customers', 'cities', 'casts'];

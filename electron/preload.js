@@ -118,5 +118,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     query: (filters) => ipcRenderer.invoke('search:query', filters),
     count: (filters) => ipcRenderer.invoke('search:count', filters),
   },
+
+  // ─── Settings (Phase 8) ───────────────────────────────────────────────────
+  settings: {
+    get:    ()      => ipcRenderer.invoke('settings:get'),
+    update: (input) => ipcRenderer.invoke('settings:update', input),
+  },
+
+  // ─── Receipts & Printing (Phase 8) ────────────────────────────────────────
+  receipts: {
+    getData:      (bookingId) => ipcRenderer.invoke('receipts:getData', bookingId),
+    getPrinters:  ()          => ipcRenderer.invoke('receipts:getPrinters'),
+    generateHtml: (params)    => ipcRenderer.invoke('receipts:generateHtml', params),
+    print:        (params)    => ipcRenderer.invoke('receipts:print', params),
+    savePdf:      (params)    => ipcRenderer.invoke('receipts:savePdf', params),
+    recordPrint:  (bookingId) => ipcRenderer.invoke('receipts:recordPrint', bookingId),
+  },
 });
+
 
