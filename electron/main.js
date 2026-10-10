@@ -14,8 +14,8 @@ const { createBackupService }   = require('./backup/service');
 const { createAvailabilityService } = require('./availability/service');
 const { createSearchService }   = require('./search/service');
 const { createSettingsService } = require('./settings/service');
-const { createReceiptsService } = require('./receipts/service');
 const { createTrackingService } = require('./tracking/service');
+const { createReportsService } = require('./reports/service');
 
 const isDev = process.env.ELECTRON_DEV === '1';
 const sessions = new Map();
@@ -31,6 +31,7 @@ let search;
 let settingsService;
 let receiptsService;
 let tracking;
+let reports;
 let staticServer = null;
 
 function getSession(event) { return sessions.get(event.sender.id); }
@@ -202,6 +203,7 @@ app.whenReady().then(async () => {
   settingsService = createSettingsService(db);
   receiptsService = createReceiptsService(db, settingsService, bookings);
   tracking        = createTrackingService(db, bookings, payments);
+  reports         = createReportsService(db, settingsService);
 
   seedDefaults();
 
@@ -333,6 +335,15 @@ ipcMain.handle('tracking:markReturned',    safeHandler((event, params) => tracki
 ipcMain.handle('tracking:unmarkReturned',  safeHandler((event, bId)    => tracking.unmarkReturned(getSession(event), bId)));
 ipcMain.handle('tracking:toggleItemReady', safeHandler((event, params) => tracking.toggleItemReady(getSession(event), params)));
 ipcMain.handle('tracking:summary',         safeHandler((event)         => ({ ok: true, data: tracking.getTrackingSummary(getSession(event)) })));
+
+// ─── IPC — Reports (Phase 10) ──────────────────────────────────────────────
+ipcMain.handle('reports:get',              safeHandler((event, params) => ({ ok: true, data: reports.getReportData(getSession(event), params) })));
+ipcMain.handle('reports:generateHtml',     safeHandler((event, params) => reports.generateReportHtml(getSession(event), params)));
+ipcMain.handle('reports:exportExcel',      safeHandler((event, params) => reports.exportExcel(getSession(event), params)));
+ipcMain.handle('reports:exportPdf',        safeHandler((event, params) => reports.exportPdf(getSession(event), params)));
+ipcMain.handle('reports:print',            safeHandler((event, params) => reports.printDirect(getSession(event), params)));
+ipcMain.handle('reports:exportEverything', safeHandler((event, params) => reports.exportEverything(getSession(event), params)));
+ipcMain.handle('reports:printDailyPack',   safeHandler((event, params) => reports.printDailyPack(getSession(event), params)));
 
 // ─── IPC — App ─────────────────────────────────────────────────────────────
 ipcMain.handle('app:version',  safeHandler((event) => { protect(event, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]); return app.getVersion(); }));

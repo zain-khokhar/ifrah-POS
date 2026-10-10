@@ -146,6 +146,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     toggleItemReady: (params) => ipcRenderer.invoke('tracking:toggleItemReady', params),
     summary:         ()       => ipcRenderer.invoke('tracking:summary'),
   },
+
+  // ─── Reports & Exports (Phase 10) ─────────────────────────────────────────
+  reports: {
+    get:              (params) => ipcRenderer.invoke('reports:get', params),
+    generateHtml:     (params) => ipcRenderer.invoke('reports:generateHtml', params),
+    exportExcel:      (params) => ipcRenderer.invoke('reports:exportExcel', params),
+    exportPdf:        (params) => ipcRenderer.invoke('reports:exportPdf', params),
+    print:            (params) => ipcRenderer.invoke('reports:print', params),
+    exportEverything: (params) => ipcRenderer.invoke('reports:exportEverything', params),
+    printDailyPack:   (params) => ipcRenderer.invoke('reports:printDailyPack', params),
+  },
 });
 
 

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   Settings, Store, Printer, Check, RefreshCw,
-  AlertCircle, ShieldAlert, Cpu
+  AlertCircle, ShieldAlert, Cpu, FileSpreadsheet, Layers,
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -12,6 +12,8 @@ export default function SettingsPage() {
   const [saved, setSaved]     = useState(false);
   const [error, setError]     = useState('');
   const [userRole, setUserRole] = useState('viewer');
+  const [exportingAll, setExportingAll] = useState(false);
+  const [exportMsg, setExportMsg]       = useState('');
 
   // Available printers
   const [printers, setPrinters] = useState([]);
@@ -331,6 +333,52 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+
+            {/* Emergency Full Excel Backup Card (Owner Only) */}
+            {isOwner && (
+              <div className="card" style={{ border: '1px solid #bbf7d0', background: '#f0fdf4' }}>
+                <div className="card-header" style={{ borderBottom: '1px solid #dcfce7' }}>
+                  <h2 className="card-title" style={{ color: '#166534' }}>
+                    <Layers size={15} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle', color: '#16a34a' }} />
+                    Emergency Fallback (Export Everything)
+                  </h2>
+                </div>
+                <div className="card-body">
+                  <p style={{ fontSize: 12.5, color: '#15803d', marginBottom: 12, lineHeight: 1.5 }}>
+                    Pura system data (Bookings, Items, Payments, Customers, Dresses) ek hi multi-tab Excel workbook mein export karein. Emergency fallback ke liye behtareen hai.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={async () => {
+                      setExportingAll(true);
+                      setExportMsg('');
+                      try {
+                        const res = await window.electronAPI?.reports?.exportEverything({});
+                        if (res?.ok && !res.canceled) {
+                          setExportMsg(`✓ Saved to: ${res.filePath}`);
+                        } else if (!res?.canceled && res?.message) {
+                          alert(res.message);
+                        }
+                      } catch (err) {
+                        alert(`Export failed: ${err.message}`);
+                      } finally {
+                        setExportingAll(false);
+                      }
+                    }}
+                    disabled={exportingAll}
+                    style={{ background: '#16a34a', borderColor: '#16a34a', fontWeight: 700, width: '100%', justifyContent: 'center' }}
+                  >
+                    <FileSpreadsheet size={14} /> {exportingAll ? 'Exporting...' : 'Export Everything to Excel (.xlsx)'}
+                  </button>
+                  {exportMsg && (
+                    <div style={{ marginTop: 8, fontSize: 11.5, color: '#166534', fontWeight: 600 }}>
+                      {exportMsg}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* App / Architecture Card */}
             <div className="card">
