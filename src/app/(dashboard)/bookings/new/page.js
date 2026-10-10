@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Save, Printer, Plus, Trash2, ChevronDown, X, Check,
   RefreshCw, AlertCircle, User, Calendar, Package, UserPlus,
-  CreditCard, Ban, CheckCircle, ShieldAlert,
+  CreditCard, Ban, CheckCircle, ShieldAlert, AlertTriangle,
 } from 'lucide-react';
 import { formatPakPhone, cnicMask, validateCustomer } from '@/lib/customerValidation';
 
@@ -720,6 +720,108 @@ function emptyItem() {
   };
 }
 
+// ─── Clash Warning Banner (inside a dress row) ────────────────────────────────
+function ClashWarningBanner({ clashes, dressName, onOverride, onDismiss, overrideLoading }) {
+  const [reason, setReason] = useState('');
+  const [showReason, setShowReason] = useState(false);
+
+  return (
+    <div style={{
+      margin: '6px 0 4px',
+      padding: '10px 12px',
+      borderRadius: 8,
+      background: 'rgba(239,68,68,0.08)',
+      border: '1px solid rgba(239,68,68,0.25)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <AlertTriangle size={15} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 12.5, color: '#ef4444', marginBottom: 4 }}>
+            ⚠️ Clash Detected — {dressName} in conflicts ke saath booked hai:
+          </div>
+          {clashes.map(c => (
+            <div key={c.booking_id} style={{ fontSize: 11.5, color: '#fca5a5', marginBottom: 2 }}>
+              • Booking #{c.booking_no} — {c.customer_name} ({c.delivery_date} → {c.returning_date || 'open'})
+            </div>
+          ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+            {!showReason ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowReason(true)}
+                  style={{
+                    fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
+                    background: 'rgba(245,158,11,0.2)', color: '#f59e0b',
+                    border: '1px solid rgba(245,158,11,0.3)', cursor: 'pointer',
+                  }}
+                >
+                  Override (Phir bhi add karein)
+                </button>
+                <button
+                  type="button"
+                  onClick={onDismiss}
+                  style={{
+                    fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                    background: 'rgba(239,68,68,0.15)', color: '#ef4444',
+                    border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer',
+                  }}
+                >
+                  Dress Hatayen
+                </button>
+              </>
+            ) : (
+              <div style={{ display: 'flex', gap: 6, width: '100%', flexWrap: 'wrap' }}>
+                <input
+                  autoFocus
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                  placeholder="Override reason likhein (zaroori hai)..."
+                  style={{
+                    flex: 1, minWidth: 200, fontSize: 12, padding: '4px 8px',
+                    borderRadius: 6, border: '1px solid rgba(245,158,11,0.4)',
+                    background: 'rgba(245,158,11,0.05)', color: '#fff', outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={!reason.trim() || overrideLoading}
+                  onClick={() => onOverride(reason.trim())}
+                  style={{
+                    fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
+                    background: reason.trim() ? '#f59e0b' : 'rgba(245,158,11,0.2)',
+                    color: reason.trim() ? '#fff' : '#d97706',
+                    border: 'none', cursor: reason.trim() ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  {overrideLoading ? <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} /> : 'Confirm Override'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReason(false)}
+                  style={{
+                    fontSize: 11.5, padding: '4px 8px', borderRadius: 6,
+                    background: 'transparent', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, flexShrink: 0 }}
+        >
+          <X size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 3 };
 const cardStyle  = { background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 16, overflow: 'hidden' };
 const cardHdr    = { padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 };
@@ -801,6 +903,10 @@ export default function NewBookingPage() {
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState('');
   const [saved,   setSaved]   = useState(false);
+
+  // Phase 6: Clash warning state — map of _key -> { clashes: [], dressName, overridden }
+  const [clashWarnings, setClashWarnings]           = useState({});
+  const [clashOverrideLoading, setClashOverrideLoading] = useState({});
 
   // Reload booking and payments
   async function reloadBookingData(id) {
@@ -922,12 +1028,68 @@ export default function NewBookingPage() {
       setItem(key, 'dress_id', null);
       setItem(key, 'dress_name_snapshot', '');
       setItem(key, 'rate', '');
+      // Clear any clash warning for this row
+      setClashWarnings(prev => { const n = { ...prev }; delete n[key]; return n; });
       return;
     }
     setItems(prev => prev.map(it => it._key === key ? {
       ...it, dress_id: dress.id, dress_name_snapshot: dress.name,
       rate: dress.rental_price || '',
     } : it));
+
+    // Phase 6: async clash check — only if we have a delivery date
+    if (deliveryDate && window.electronAPI?.availability?.checkClash) {
+      window.electronAPI.availability.checkClash({
+        dressId: dress.id,
+        deliveryDate,
+        returningDate: returningDate || null,
+        excludeBookingId: editBookingId || null,
+      }).then(res => {
+        if (res?.ok && res.data && !res.data.available) {
+          setClashWarnings(prev => ({
+            ...prev,
+            [key]: { clashes: res.data.clashes, dressName: dress.name, overridden: false },
+          }));
+        } else {
+          // Available — clear any old warning
+          setClashWarnings(prev => { const n = { ...prev }; delete n[key]; return n; });
+        }
+      }).catch(() => {/* ignore network errors silently */});
+    }
+  }
+
+  function dismissClash(key) {
+    // Remove the dress from the booking
+    setItem(key, 'dress_id', null);
+    setItem(key, 'dress_name_snapshot', '');
+    setItem(key, 'rate', '');
+    setClashWarnings(prev => { const n = { ...prev }; delete n[key]; return n; });
+  }
+
+  async function handleClashOverride(key, reason) {
+    const warning = clashWarnings[key];
+    if (!warning) return;
+    setClashOverrideLoading(prev => ({ ...prev, [key]: true }));
+    try {
+      // Find the dress_id from items
+      const item = items.find(it => it._key === key);
+      if (item && window.electronAPI?.availability?.logOverride) {
+        await window.electronAPI.availability.logOverride({
+          bookingId: editBookingId || null,
+          dressId: item.dress_id,
+          dressName: warning.dressName,
+          clashBookingNo: warning.clashes.map(c => c.booking_no).join(', '),
+          reason,
+        });
+      }
+      // Mark as overridden (warning disappears, dress stays)
+      setClashWarnings(prev => { const n = { ...prev }; delete n[key]; return n; });
+    } catch (e) {
+      console.error('Override log failed:', e);
+      setClashWarnings(prev => { const n = { ...prev }; delete n[key]; return n; });
+    } finally {
+      setClashOverrideLoading(prev => { const n = { ...prev }; delete n[key]; return n; });
+    }
   }
 
   const isViewer = userRole === 'viewer';
@@ -1335,6 +1497,19 @@ export default function NewBookingPage() {
                     </button>
                   )}
                 </div>
+
+                {/* Phase 6: Clash Warning Banner */}
+                {clashWarnings[it._key] && (
+                  <div style={{ paddingLeft: 28, paddingRight: 4 }}>
+                    <ClashWarningBanner
+                      clashes={clashWarnings[it._key].clashes}
+                      dressName={clashWarnings[it._key].dressName}
+                      onDismiss={() => dismissClash(it._key)}
+                      onOverride={(reason) => handleClashOverride(it._key, reason)}
+                      overrideLoading={!!clashOverrideLoading[it._key]}
+                    />
+                  </div>
+                )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '120px 120px 100px 1fr', gap: 10, paddingLeft: 28 }}>
                   <div>

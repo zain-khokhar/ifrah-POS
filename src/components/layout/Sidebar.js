@@ -5,18 +5,21 @@ import {
   LayoutDashboard, BookOpen, Users, Shirt,
   CreditCard, Truck, RotateCcw, BarChart2,
   UserCog, Settings, Database, Plus, LogOut, Sparkles,
+  CalendarCheck, Search,
 } from 'lucide-react';
 import { useState } from 'react';
 
 const mainNav = [
-  { label: 'Dashboard',  href: '/dashboard',  icon: LayoutDashboard },
-  { label: 'Bookings',   href: '/bookings',   icon: BookOpen        },
-  { label: 'Customers',  href: '/customers',  icon: Users           },
-  { label: 'Dresses',    href: '/dresses',    icon: Shirt           },
-  { label: 'Payments',   href: '/payments',   icon: CreditCard      },
-  { label: 'Deliveries', href: '/deliveries', icon: Truck           },
-  { label: 'Returns',    href: '/returns',    icon: RotateCcw       },
-  { label: 'Reports',    href: '/reports',    icon: BarChart2       },
+  { label: 'Dashboard',     href: '/dashboard',    icon: LayoutDashboard },
+  { label: 'Bookings',      href: '/bookings',     icon: BookOpen        },
+  { label: 'Customers',     href: '/customers',    icon: Users           },
+  { label: 'Dresses',       href: '/dresses',      icon: Shirt           },
+  { label: 'Payments',      href: '/payments',     icon: CreditCard      },
+  { label: 'Deliveries',    href: '/deliveries',   icon: Truck           },
+  { label: 'Returns',       href: '/returns',      icon: RotateCcw       },
+  { label: 'Availability',  href: '/availability', icon: CalendarCheck   },
+  { label: 'Search',        href: '/search',       icon: Search          },
+  { label: 'Reports',       href: '/reports',      icon: BarChart2       },
 ];
 
 const adminNav = [
