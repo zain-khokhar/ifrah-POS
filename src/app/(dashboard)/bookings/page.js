@@ -155,8 +155,30 @@ export default function BookingsPage() {
                     </td>
                     <td style={{ fontWeight: 600, color: '#0f172a' }}>{b.customer_name || '—'}</td>
                     <td style={{ fontFamily: 'monospace', fontSize: 12.5, color: '#64748b' }}>{b.customer_phone || '—'}</td>
-                    <td style={{ fontSize: 12.5 }}>{b.delivery_date || '—'}</td>
-                    <td style={{ fontSize: 12.5 }}>{b.returning_date || '—'}</td>
+                    <td>
+                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{b.delivery_date || '—'}</div>
+                      {b.delivered_on ? (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
+                          ✓ Delivered
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 10.5, color: '#94a3b8' }}>Pending</span>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{b.returning_date || '—'}</div>
+                      {b.returned_on ? (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
+                          ✓ Returned {b.return_condition ? `(${b.return_condition})` : ''}
+                        </span>
+                      ) : (b.delivered_on && b.returning_date && b.returning_date < new Date().toISOString().slice(0, 10)) ? (
+                        <span style={{ fontSize: 10.5, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
+                          ⚠️ Overdue
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 10.5, color: '#94a3b8' }}>Awaiting</span>
+                      )}
+                    </td>
                     <td><StatusChip status={b.status} /></td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>
                       {b.grand_total > 0 ? `Rs. ${b.grand_total.toLocaleString()}` : '—'}

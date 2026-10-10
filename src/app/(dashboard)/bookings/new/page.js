@@ -913,6 +913,15 @@ export default function NewBookingPage() {
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptBookingId, setReceiptBookingId] = useState(null);
 
+  // Phase 9: Tracking state (Delivered & Returned badges)
+  const [trackingInfo, setTrackingInfo] = useState({
+    delivered_on: null,
+    delivery_note: '',
+    returned_on: null,
+    return_condition: null,
+    return_damage_note: '',
+  });
+
   // Reload booking and payments
   async function reloadBookingData(id) {
     const res = await window.electronAPI?.bookings.get(id);
@@ -930,6 +939,13 @@ export default function NewBookingPage() {
       setExistingPayments(b.payments || []);
       setLastEditedBy(b.updated_by_name || b.created_by_name || '');
       setLastEditedTime(b.updated_at || b.created_at || '');
+      setTrackingInfo({
+        delivered_on: b.delivered_on || null,
+        delivery_note: b.delivery_note || '',
+        returned_on: b.returned_on || null,
+        return_condition: b.return_condition || null,
+        return_damage_note: b.return_damage_note || '',
+      });
     }
   }
 
@@ -986,6 +1002,13 @@ export default function NewBookingPage() {
           setExistingPayments(b.payments || []);
           setLastEditedBy(b.updated_by_name || b.created_by_name || '');
           setLastEditedTime(b.updated_at || b.created_at || '');
+          setTrackingInfo({
+            delivered_on: b.delivered_on || null,
+            delivery_note: b.delivery_note || '',
+            returned_on: b.returned_on || null,
+            return_condition: b.return_condition || null,
+            return_damage_note: b.return_damage_note || '',
+          });
         }
       } else {
         const nextNo = await window.electronAPI?.bookings.nextNo();
@@ -1409,6 +1432,78 @@ export default function NewBookingPage() {
               <button type="button" className="btn btn-sm btn-secondary" onClick={discardDraft}>
                 Discard
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── PHASE 9: TRACKING STATUS BANNER (DELIVERED & RETURNED BADGES) ── */}
+        {editBookingId && (
+          <div style={{
+            background: '#ffffff', borderRadius: 12, border: '1px solid #e2e8f0',
+            padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+              {/* Delivery badge */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>Delivery Status:</span>
+                {trackingInfo.delivered_on ? (
+                  <span className="badge badge-success" style={{ fontSize: 12, padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Check size={12} /> Delivered ({trackingInfo.delivered_on})
+                  </span>
+                ) : (
+                  <span className="badge badge-warning" style={{ fontSize: 12, padding: '3px 8px' }}>
+                    Pending Delivery
+                  </span>
+                )}
+                {trackingInfo.delivery_note && (
+                  <span style={{ fontSize: 11.5, color: '#64748b', fontStyle: 'italic' }}>
+                    &quot;{trackingInfo.delivery_note}&quot;
+                  </span>
+                )}
+              </div>
+
+              {/* Return badge */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>Return Status:</span>
+                {trackingInfo.returned_on ? (
+                  <span className="badge badge-success" style={{ fontSize: 12, padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Check size={12} /> Returned ({trackingInfo.returned_on})
+                    {trackingInfo.return_condition && (
+                      <span style={{
+                        marginLeft: 4, padding: '1px 5px', borderRadius: 4, fontSize: 10.5,
+                        background: trackingInfo.return_condition === 'Damaged' ? '#fee2e2' : '#f0fdf4',
+                        color: trackingInfo.return_condition === 'Damaged' ? '#dc2626' : '#16a34a',
+                      }}>
+                        {trackingInfo.return_condition}
+                      </span>
+                    )}
+                  </span>
+                ) : (trackingInfo.delivered_on && returningDate && returningDate < new Date().toISOString().slice(0, 10)) ? (
+                  <span className="badge badge-danger" style={{ fontSize: 12, padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <AlertCircle size={12} /> Overdue Return
+                  </span>
+                ) : (
+                  <span className="badge badge-warning" style={{ fontSize: 12, padding: '3px 8px' }}>
+                    Awaiting Return
+                  </span>
+                )}
+                {trackingInfo.return_damage_note && (
+                  <span style={{ fontSize: 11.5, color: '#dc2626', fontStyle: 'italic' }}>
+                    &quot;{trackingInfo.return_damage_note}&quot;
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Link href="/deliveries" className="btn btn-secondary btn-sm" style={{ fontSize: 12 }}>
+                Deliveries Tracker →
+              </Link>
+              <Link href="/returns" className="btn btn-secondary btn-sm" style={{ fontSize: 12 }}>
+                Returns Tracker →
+              </Link>
             </div>
           </div>
         )}

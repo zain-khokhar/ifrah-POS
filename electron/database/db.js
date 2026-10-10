@@ -129,6 +129,23 @@ function runMigrations(db) {
     }
   }
 
+  // Phase 9 columns migration
+  if (tableInfo('bookings').length > 0 && !hasCol('bookings', 'delivery_note')) {
+    try { db.exec(`ALTER TABLE bookings ADD COLUMN delivery_note TEXT;`); } catch {}
+  }
+  if (tableInfo('bookings').length > 0 && !hasCol('bookings', 'return_damage_note')) {
+    try { db.exec(`ALTER TABLE bookings ADD COLUMN return_damage_note TEXT;`); } catch {}
+  }
+  if (tableInfo('bookings').length > 0 && !hasCol('bookings', 'return_damage_photo')) {
+    try { db.exec(`ALTER TABLE bookings ADD COLUMN return_damage_photo TEXT;`); } catch {}
+  }
+  if (tableInfo('booking_items').length > 0 && !hasCol('booking_items', 'is_ready')) {
+    try { db.exec(`ALTER TABLE booking_items ADD COLUMN is_ready INTEGER NOT NULL DEFAULT 0;`); } catch {}
+  }
+  if (tableInfo('booking_items').length > 0 && !hasCol('booking_items', 'item_condition')) {
+    try { db.exec(`ALTER TABLE booking_items ADD COLUMN item_condition TEXT DEFAULT 'OK';`); } catch {}
+  }
+
   // Seed default settings if empty
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS settings (

@@ -1,5 +1,5 @@
 # Progress
-Current phase: 8
+Current phase: 9
 Last updated: 2026-10-10
 
 - [x] Phase 0  Decisions and setup
@@ -11,7 +11,7 @@ Last updated: 2026-10-10
 - [x] Phase 6  Availability and clash
 - [x] Phase 7  Search and filters
 - [x] Phase 8  Receipts and printing
-- [ ] Phase 9  Delivery and return
+- [x] Phase 9  Delivery and return
 - [ ] Phase 10 Reports and exports
 - [ ] Phase 11 Access migration
 - [ ] Phase 12 Backup and restore
@@ -108,8 +108,36 @@ Last updated: 2026-10-10
 
 ---
 
+## Phase 9 Implementation Status
+- **Database Schema & Migrations:**
+  - Added tracking fields to `bookings`: `delivery_note`, `return_damage_note`, `return_damage_photo`.
+  - Added night-before prep and item tracking fields to `booking_items`: `is_ready` (BOOLEAN DEFAULT 0), `item_condition` (TEXT DEFAULT 'OK').
+  - Safe automatic `ALTER TABLE` migrations executed on startup for existing SQLite databases.
+- **Tracking Engine (`electron/tracking/service.js` & IPC):**
+  - `listDeliveries`: filters by `today`, `tomorrow`, `upcoming` (next 7 days), `pending`, `delivered`, or custom date, with live item breakdown and ready states.
+  - `toggleItemReady`: atomic per-dress night-before preparation tick with full audit logging.
+  - `markDelivered`: records delivery date (default today), handover note, auto-sets all items ready, promotes status to `Open`, audited.
+  - `unmarkDelivered`: operational correction rollback with audit trail.
+  - `listReturns`: tracks returns with exact `days_late` and `is_overdue` calculation; filters by `all`, `overdue`, `due_today`, `pending`, `returned`.
+  - `markReturned`: condition choice (`OK`, `Needs cleaning`, `Damaged`), damage/cleaning note, optional photo path.
+  - **Return Flow Prompts Automation:**
+    - Refund Security Deposit: automatically writes payment ledger record with `kind: 'deposit_refund'` using selected method (`cash`/`bank`).
+    - Collect Remaining Balance: automatically records payment with `kind: 'rental'` using selected method (`cash`/`bank`).
+    - Settle & Close: validates Rule 6 / closing eligibility (delivered, returned, remaining is 0) and closes booking (or Owner force-close override with logged reason).
+  - `unmarkReturned`: operational correction rollback with audit trail.
+  - `getTrackingSummary`: real-time counts for Home counters (deliveries today, returns due, overdue returns, pending balance bookings).
+- **Dashboard & UI Enhancements:**
+  - **Deliveries Tracker (`/deliveries`):** filter chips, preparation checklist ticks per dress line, remaining balance warning alerts, mark delivered modal, receipt reprint button.
+  - **Returns Tracker (`/returns`):** filter chips, prominent red pulsating overdue badge showing exact days late (e.g. `2 din late`), condition selector, integrated return settling prompt checkboxes (deposit refund, remaining balance collection, auto-close).
+  - **Booking Screen (`/bookings/new`):** high-visibility Tracking Status Banner displaying live Delivered & Returned status chips, handover note, condition, and quick links to tracker screens.
+  - **Bookings List (`/bookings`):** Delivered and Returned status chips directly in delivery and return date columns, with overdue alerts.
+  - **Home Dashboard (`/dashboard`):** live stat cards deep-linked to pre-filtered tracking views (`/deliveries?filter=today`, `/returns?filter=due_today`, `/returns?filter=overdue`).
+
+---
+
 ## Verification & Tests
-- `npm test`: **108 / 108 unit tests passed** (0 failures, 11 dedicated tests for Phase 8 templates, layouts, Urdu text, reprint counters, settings, and roles).
+- `npm test`: **121 / 121 unit tests passed** (0 failures, 13 dedicated tests for Phase 9 deliveries, returns, item prep ticks, return prompts, and overdue calculations).
 - `npm run lint`: **0 errors, 0 warnings** (Clean ESLint check across all dashboard pages).
 - `npm run build`: **Compiled & exported successfully** across all 19 static routes via Next.js Turbopack.
+
 

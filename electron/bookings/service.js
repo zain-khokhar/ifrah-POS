@@ -63,6 +63,7 @@ function createBookingsService(db) {
       SELECT
         b.id, b.booking_no, b.status,
         b.booking_date, b.delivery_date, b.returning_date,
+        b.delivered_on, b.returned_on, b.return_condition,
         b.booking_month, b.total_returning_days,
         b.grand_total, b.amount_paid, b.remaining,
         b.discount, b.security_deposit, b.notes,

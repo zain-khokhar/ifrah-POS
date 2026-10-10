@@ -182,8 +182,11 @@ const SCHEMA_STATEMENTS = [
     relative_relation   TEXT,
     notes               TEXT,
     delivered_on        TEXT,
+    delivery_note       TEXT,
     returned_on         TEXT,
     return_condition    TEXT,
+    return_damage_note  TEXT,
+    return_damage_photo TEXT,
     security_deposit    INTEGER NOT NULL DEFAULT 0,
     discount            INTEGER NOT NULL DEFAULT 0,
     grand_total         INTEGER NOT NULL DEFAULT 0,       -- sum of line totals - discount
@@ -222,6 +225,8 @@ const SCHEMA_STATEMENTS = [
     hand_bag            INTEGER NOT NULL DEFAULT 0,
     double_dupatta      INTEGER NOT NULL DEFAULT 0,
     shoes               INTEGER NOT NULL DEFAULT 0,
+    is_ready            INTEGER NOT NULL DEFAULT 0,       -- Phase 9 night-before preparation tick
+    item_condition      TEXT DEFAULT 'OK',                -- Phase 9 item condition
     created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     updated_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     deleted_at          TEXT    DEFAULT NULL,

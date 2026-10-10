@@ -134,6 +134,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     savePdf:      (params)    => ipcRenderer.invoke('receipts:savePdf', params),
     recordPrint:  (bookingId) => ipcRenderer.invoke('receipts:recordPrint', bookingId),
   },
+
+  // ─── Tracking (Phase 9 Delivery & Return) ─────────────────────────────────
+  tracking: {
+    listDeliveries:  (params) => ipcRenderer.invoke('tracking:listDeliveries', params),
+    listReturns:     (params) => ipcRenderer.invoke('tracking:listReturns', params),
+    markDelivered:   (params) => ipcRenderer.invoke('tracking:markDelivered', params),
+    unmarkDelivered: (bId)    => ipcRenderer.invoke('tracking:unmarkDelivered', bId),
+    markReturned:    (params) => ipcRenderer.invoke('tracking:markReturned', params),
+    unmarkReturned:  (bId)    => ipcRenderer.invoke('tracking:unmarkReturned', bId),
+    toggleItemReady: (params) => ipcRenderer.invoke('tracking:toggleItemReady', params),
+    summary:         ()       => ipcRenderer.invoke('tracking:summary'),
+  },
 });
+
 
 

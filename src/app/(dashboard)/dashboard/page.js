@@ -108,19 +108,19 @@ export default function DashboardPage() {
       label: 'Aaj ki Deliveries',
       value: summary.deliveries,
       sub: `${summary.deliveries} customer${summary.deliveries !== 1 ? 's' : ''} ko dresses jaayengi`,
-      icon: Truck, color: '#3b82f6', bg: '#dbeafe', href: '/deliveries',
+      icon: Truck, color: '#3b82f6', bg: '#dbeafe', href: '/deliveries?filter=today',
     },
     {
       label: 'Aaj ke Returns',
       value: summary.returns,
       sub: `${summary.returns} dress${summary.returns !== 1 ? 'es' : ''} wapas aangi aaj`,
-      icon: RotateCcw, color: '#10b981', bg: '#dcfce7', href: '/returns',
+      icon: RotateCcw, color: '#10b981', bg: '#dcfce7', href: '/returns?filter=due_today',
     },
     {
       label: 'Overdue Returns',
       value: summary.overdue,
       sub: summary.overdue > 0 ? `${summary.overdue} dress abhi tak wapas nahi` : 'Sab clear hai!',
-      icon: AlertTriangle, color: '#ef4444', bg: '#fee2e2', href: '/returns',
+      icon: AlertTriangle, color: '#ef4444', bg: '#fee2e2', href: '/returns?filter=overdue',
     },
     {
       label: 'Pending Payments',
