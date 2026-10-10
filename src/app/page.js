@@ -1,6 +1,7 @@
 'use client';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { Sparkles } from 'lucide-react';
 
 /**
  * Root page — redirects to /dashboard if logged in, else /login
@@ -27,7 +28,14 @@ export default function Home() {
       justifyContent: 'center',
       background: 'linear-gradient(145deg, #0f0e1a 0%, #1e1040 55%, #2d1b69 100%)',
     }}>
-      <div style={{ fontSize: 48, marginBottom: 20 }}>👗</div>
+      <div style={{
+        width: 64, height: 64, borderRadius: 18, marginBottom: 20,
+        background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: '0 8px 24px rgba(124,58,237,0.4)',
+      }}>
+        <Sparkles size={32} color="#ffffff" />
+      </div>
       <h1 style={{ color: '#f59e0b', fontSize: 22, fontWeight: 800, margin: '0 0 6px', letterSpacing: '-0.3px' }}>
         Ifrah Collection
       </h1>

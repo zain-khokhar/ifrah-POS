@@ -48,7 +48,7 @@ export default function ReturnsPage() {
                   <td>{r.returnDate}</td>
                   <td>
                     <span className={`badge ${r.status === 'returned' ? 'badge-success' : r.status === 'overdue' ? 'badge-danger' : 'badge-warning'}`}>
-                      {r.status === 'returned' ? 'Returned' : r.status === 'overdue' ? '⚠ Overdue' : 'Pending'}
+                      {r.status === 'returned' ? 'Returned' : r.status === 'overdue' ? 'Overdue' : 'Pending'}
                     </span>
                   </td>
                   <td style={{ color: r.daysOverdue > 0 ? '#ef4444' : '#94a3b8', fontWeight: r.daysOverdue > 0 ? 700 : 400 }}>

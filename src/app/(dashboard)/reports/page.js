@@ -1,5 +1,5 @@
 'use client';
-import { BarChart2, Users, Shirt, CreditCard, Truck, AlertTriangle, FileText, Download } from 'lucide-react';
+import { BarChart2, Users, Shirt, CreditCard, Truck, AlertTriangle, FileText, Download, FileBarChart } from 'lucide-react';
 
 const REPORTS = [
   {
@@ -60,7 +60,9 @@ export default function ReportsPage() {
           background: 'linear-gradient(135deg, #ede9fe, #fdf4ff)',
           borderRadius: 10, border: '1px solid #ddd6fe',
         }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#7c3aed' }}>🚧 Reports — Phase 9 mein aayenge</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: '#7c3aed' }}>
+            <FileBarChart size={16} /> Reports Roadmap (Phase 9)
+          </div>
           <div style={{ fontSize: 12.5, color: '#6d28d9', marginTop: 4 }}>
             Sabhi reports Phase 9 mein implement honge. Niche diye gaye reports available honge — date filter, city filter, export (PDF, Excel, CSV) ke saath.
           </div>

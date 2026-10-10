@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, Lock, User, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, AlertCircle, Sparkles, BookOpen, Users, Shirt, CreditCard, BarChart2 } from 'lucide-react';
 
 /**
  * Phase 0 — Mock users (will be replaced with SQLite in Phase 1)
@@ -82,10 +82,9 @@ export default function LoginPage() {
             borderRadius: 22,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 28px',
-            fontSize: 44,
             boxShadow: '0 20px 48px rgba(124,58,237,0.4)',
           }}>
-            👗
+            <Sparkles size={42} color="#ffffff" />
           </div>
 
           <h1 style={{ fontSize: 30, fontWeight: 800, color: '#f59e0b', margin: '0 0 8px', letterSpacing: '-0.5px' }}>
@@ -97,27 +96,30 @@ export default function LoginPage() {
 
           {/* Feature list */}
           {[
-            { icon: '📋', text: 'Booking Management System' },
-            { icon: '👥', text: 'Customer Records & Search' },
-            { icon: '👗', text: 'Dress Catalogue & Availability' },
-            { icon: '💳', text: 'Payment Tracking & Receipts' },
-            { icon: '📊', text: 'Business Reports & Exports' },
-          ].map(item => (
-            <div key={item.text} style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '10px 16px',
-              background: 'rgba(255,255,255,0.04)',
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.06)',
-              marginBottom: 6,
-              textAlign: 'left',
-            }}>
-              <span style={{ fontSize: 16 }}>{item.icon}</span>
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>
-                {item.text}
-              </span>
-            </div>
-          ))}
+            { icon: BookOpen, text: 'Booking Management System' },
+            { icon: Users, text: 'Customer Records & Search' },
+            { icon: Shirt, text: 'Dress Catalogue & Availability' },
+            { icon: CreditCard, text: 'Payment Tracking & Receipts' },
+            { icon: BarChart2, text: 'Business Reports & Exports' },
+          ].map(item => {
+            const Icon = item.icon;
+            return (
+              <div key={item.text} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 16px',
+                background: 'rgba(255,255,255,0.04)',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.06)',
+                marginBottom: 6,
+                textAlign: 'left',
+              }}>
+                <Icon size={16} color="#c084fc" />
+                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>
+                  {item.text}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         <div style={{ position: 'absolute', bottom: 20, fontSize: 11, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.5px' }}>
@@ -129,7 +131,7 @@ export default function LoginPage() {
       <div className="login-right">
         <div style={{ width: '100%' }}>
           <h2 style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', margin: '0 0 4px', letterSpacing: '-0.4px' }}>
-            Welcome Back 👋
+            Welcome Back
           </h2>
           <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 32px' }}>
             Apna account login karein

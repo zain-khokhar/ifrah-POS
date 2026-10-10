@@ -4,6 +4,7 @@ import Link from 'next/link';
 import {
   Truck, RotateCcw, AlertTriangle, CreditCard,
   ArrowRight, Plus, Clock, TrendingUp,
+  Zap, BarChart2, UserPlus, Shirt, Info,
 } from 'lucide-react';
 
 // ─── Mock data — Phase 0 ────────────────────────────────────────
@@ -92,7 +93,7 @@ export default function DashboardPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">
-            {greeting()}, {user?.name?.split(' ')[0] || 'User'} 👋
+            {greeting()}, {user?.name?.split(' ')[0] || 'User'}
           </h1>
           <p className="page-subtitle">{todayStr} • {timeStr}</p>
         </div>
@@ -217,36 +218,43 @@ export default function DashboardPage() {
             {/* Quick Actions */}
             <div className="card">
               <div className="card-header">
-                <h2 className="card-title" style={{ fontSize: 13.5 }}>⚡ Quick Actions</h2>
+                <h2 className="card-title" style={{ fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Zap size={14} color="#f59e0b" />
+                  Quick Actions
+                </h2>
               </div>
               <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {[
-                  { label: '+ New Booking',  href: '/bookings/new', primary: true  },
-                  { label: '+ Add Customer', href: '/customers',    primary: false },
-                  { label: '+ Add Dress',    href: '/dresses',      primary: false },
-                  { label: '📊 Reports',     href: '/reports',      primary: false },
-                  { label: '🚚 Deliveries',  href: '/deliveries',   primary: false },
-                ].map(a => (
-                  <Link key={a.label} href={a.href} className={`btn ${a.primary ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ justifyContent: 'center', width: '100%' }}>
-                    {a.label}
-                  </Link>
-                ))}
+                  { label: 'New Booking',  href: '/bookings/new', primary: true,  icon: Plus },
+                  { label: 'Add Customer', href: '/customers',    primary: false, icon: UserPlus },
+                  { label: 'Add Dress',    href: '/dresses',      primary: false, icon: Shirt },
+                  { label: 'Reports',     href: '/reports',      primary: false, icon: BarChart2 },
+                  { label: 'Deliveries',  href: '/deliveries',   primary: false, icon: Truck },
+                ].map(a => {
+                  const Icon = a.icon;
+                  return (
+                    <Link key={a.label} href={a.href} className={`btn ${a.primary ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ justifyContent: 'center', width: '100%', gap: 6 }}>
+                      <Icon size={14} />
+                      {a.label}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Phase Info */}
+            {/* System Status */}
             <div style={{
               padding: '12px 14px',
               background: 'linear-gradient(135deg, #ede9fe, #fdf4ff)',
               borderRadius: 10,
               border: '1px solid #ddd6fe',
             }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>
-                🚧 Phase 0 — Foundation
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>
+                <Info size={13} /> Offline-First POS
               </div>
               <div style={{ fontSize: 11.5, color: '#6d28d9', lineHeight: 1.5 }}>
-                Abhi mock data chal raha hai. Phase 1 mein SQLite database connect hoga aur real data aayega.
+                Local SQLite database engine ready. Sab records shop computer par mehfooz rahenge.
               </div>
             </div>
           </div>

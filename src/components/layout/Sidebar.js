@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, BookOpen, Users, Shirt,
   CreditCard, Truck, RotateCcw, BarChart2,
-  UserCog, Settings, Database, Plus, LogOut,
+  UserCog, Settings, Database, Plus, LogOut, Sparkles,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -63,9 +63,9 @@ export default function Sidebar() {
             width: 36, height: 36, borderRadius: 9, flexShrink: 0,
             background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 20, boxShadow: '0 4px 12px rgba(124,58,237,0.3)',
+            boxShadow: '0 4px 12px rgba(124,58,237,0.3)',
           }}>
-            👗
+            <Sparkles size={18} color="#ffffff" />
           </div>
           <div>
             <div style={{ fontSize: 14.5, fontWeight: 800, color: '#f59e0b', letterSpacing: '0.2px' }}>

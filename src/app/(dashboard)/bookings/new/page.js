@@ -1,5 +1,5 @@
 'use client';
-import { Plus, BookOpen, ArrowLeft, Calendar, User, Shirt, CreditCard, Save, Printer } from 'lucide-react';
+import { Plus, BookOpen, ArrowLeft, Calendar, User, Shirt, CreditCard, Save, Printer, Layers } from 'lucide-react';
 import Link from 'next/link';
 
 export default function NewBookingPage() {
@@ -29,7 +29,7 @@ export default function NewBookingPage() {
           borderRadius: 10, border: '1px solid #ddd6fe',
           display: 'flex', alignItems: 'center', gap: 12,
         }}>
-          <span style={{ fontSize: 18 }}>🚧</span>
+          <Layers size={22} color="#7c3aed" style={{ flexShrink: 0 }} />
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#7c3aed' }}>Phase 5 — Core Booking System</div>
             <div style={{ fontSize: 12.5, color: '#6d28d9', marginTop: 2 }}>
