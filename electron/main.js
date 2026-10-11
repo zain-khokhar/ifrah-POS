@@ -19,13 +19,17 @@ const { createTrackingService } = require('./tracking/service');
 const { createReportsService } = require('./reports/service');
 const { createSyncService }    = require('./sync/service');
 const { importAccessData }     = require('../scripts/import-access');
-const { verifyLicense }        = require('./licensing/validator');
+const { verifyLicense, assertLicenseValid } = require('./licensing/validator');
 const { getFriendlyMachineCode } = require('./licensing/hwid');
 const { activateOnline }       = require('./licensing/activation');
 
 // Register bytenode runtime for V8 bytecode execution
 try {
   require('bytenode');
+} catch {}
+
+try {
+  app.setName('Ifrah Collection POS');
 } catch {}
 
 const isDev = process.env.ELECTRON_DEV === '1';
@@ -59,9 +63,12 @@ let staticServer = null;
 function getSession(event) { return sessions.get(event.sender.id); }
 function protect(event, roles) { return requireRole(getSession(event), roles); }
 
-function safeHandler(handler) {
+function safeHandler(handler, options = {}) {
   return async (...args) => {
     try {
+      if (!options.skipSecurityCheck) {
+        assertLicenseValid(app);
+      }
       return await handler(...args);
     } catch (error) {
       if (error instanceof AuthorizationError)
@@ -72,6 +79,7 @@ function safeHandler(handler) {
       if (msg.includes('SQLITE_BUSY')) msg = 'Database masroof hai. Barah-e-karam dobara koshish karein.';
       if (msg.includes('UNIQUE constraint failed')) msg = 'Ye record pehle se mojood hai (duplicate record).';
       if (msg.includes('NOT NULL constraint failed')) msg = 'Zaroori maloomat darj nahi ki gayi.';
+      if (msg.includes('SECURITY_BREACH')) msg = 'Security tasdeeq fail ho gayi: Ghair tasdeeq shuda machine.';
       return { ok: false, message: msg };
     }
   };
@@ -160,6 +168,7 @@ function startStaticServer(outDir) {
 
 // ─── Window ────────────────────────────────────────────────────────────────
 function createWindow(serverPort) {
+  const iconPath = path.join(__dirname, '../public/icon.ico');
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -167,6 +176,7 @@ function createWindow(serverPort) {
     minHeight: 700,
     title: 'Ifrah Collection POS',
     backgroundColor: '#0f0e1a',
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

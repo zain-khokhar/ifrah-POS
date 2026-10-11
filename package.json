@@ -57,11 +57,18 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ifrah Collection POS"
     },
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*"
+    ],
     "files": [
       "out/**/*",
       "electron/**/*",
+      "public/**/*",
       "scripts/**/*",
       "node_modules/**/*",
       "package.json"
