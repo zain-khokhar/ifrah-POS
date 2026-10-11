@@ -128,39 +128,54 @@ function createReceiptsService(db, settingsService, bookingsService) {
         },
       });
 
+      let timeoutId = setTimeout(() => {
+        try { if (win) { win.destroy(); win = null; } } catch {}
+        resolve({ ok: false, canceled: true, message: 'Print timed out.' });
+      }, 45000);
+
       win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
-      win.webContents.once('did-finish-load', () => {
-        const printOptions = {
-          silent: Boolean(silent || printerName),
-          printBackground: true,
-          copies: Math.max(1, parseInt(copies || 1, 10)),
-          margins: { marginType: 'none' },
-        };
+      win.webContents.once('did-finish-load', async () => {
+        try {
+          await new Promise(r => setTimeout(r, 200));
 
-        if (printerName) {
-          printOptions.deviceName = printerName;
-        }
+          const printOptions = {
+            silent: Boolean(silent || printerName),
+            printBackground: true,
+            copies: Math.max(1, parseInt(copies || 1, 10)),
+            margins: { marginType: 'default' },
+          };
 
-        if (layout === 'a4' || layout === 'A4') {
-          printOptions.pageSize = 'A4';
-        } else {
-          printOptions.pageSize = { width: 80000, height: 300000 };
-        }
-
-        win.webContents.print(printOptions, (success, failureReason) => {
-          try { win.destroy(); win = null; } catch {}
-
-          if (!success) {
-            reject(new Error(failureReason || 'Print canceled or failed.'));
-          } else {
-            recordPrint(session, bookingId);
-            resolve({ ok: true, booking_no: booking.booking_no });
+          if (printerName) {
+            printOptions.deviceName = printerName;
           }
-        });
+
+          if (layout === 'a4' || layout === 'A4') {
+            printOptions.pageSize = 'A4';
+          } else {
+            printOptions.pageSize = { width: 80000, height: 300000 };
+          }
+
+          win.webContents.print(printOptions, (success, failureReason) => {
+            clearTimeout(timeoutId);
+            try { win.destroy(); win = null; } catch {}
+
+            if (!success) {
+              resolve({ ok: false, canceled: true, message: failureReason || 'Print canceled.' });
+            } else {
+              recordPrint(session, bookingId);
+              resolve({ ok: true, booking_no: booking.booking_no });
+            }
+          });
+        } catch (err) {
+          clearTimeout(timeoutId);
+          try { if (win) win.destroy(); } catch {}
+          resolve({ ok: false, canceled: true, message: err.message });
+        }
       });
 
       win.webContents.once('did-fail-load', (_e, code, desc) => {
+        clearTimeout(timeoutId);
         try { win.destroy(); win = null; } catch {}
         reject(new Error(`Failed to load receipt HTML: ${desc} (${code})`));
       });
@@ -189,9 +204,12 @@ function createReceiptsService(db, settingsService, bookingsService) {
 
       win.webContents.once('did-finish-load', async () => {
         try {
+          // Allow Chromium to complete layout, fonts and CSS measurement
+          await new Promise(r => setTimeout(r, 250));
+
           const pdfOptions = {
             printBackground: true,
-            margins: { marginType: 'none' },
+            margins: { marginType: 'default' },
           };
 
           if (layout === 'a4' || layout === 'A4') {

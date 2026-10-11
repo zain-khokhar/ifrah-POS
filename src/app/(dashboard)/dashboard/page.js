@@ -6,6 +6,7 @@ import {
   ArrowRight, Plus, Clock, Info,
   Zap, BarChart2, UserPlus, Shirt, BookOpen, ShieldCheck,
 } from 'lucide-react';
+import { formatDate } from '@/lib/dateUtils';
 
 const STATUS_CHIP = {
   None:    { bg: '#f1f5f9', color: '#64748b' },
@@ -302,48 +303,50 @@ export default function DashboardPage() {
               </div>
             ) : (
               <>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Booking ID</th>
-                      <th>Customer</th>
-                      <th>Dress</th>
-                      <th>Delivery</th>
-                      <th>Return</th>
-                      <th>Status</th>
-                      <th style={{ textAlign: 'right' }}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentBookings.map(b => {
-                      const chip = STATUS_CHIP[b.status] || STATUS_CHIP.None;
-                      return (
-                        <tr key={b.id}>
-                          <td>
-                            <span style={{ fontWeight: 700, color: '#7c3aed', fontFamily: 'monospace', fontSize: 13 }}>
-                              #{b.booking_no}
-                            </span>
-                          </td>
-                          <td style={{ fontWeight: 600 }}>{b.customer_name || '—'}</td>
-                          <td style={{ color: '#64748b' }}>{b.dresses_summary || '—'}</td>
-                          <td>{b.delivery_date || '—'}</td>
-                          <td>{b.returning_date || '—'}</td>
-                          <td>
-                            <span style={{
-                              background: chip.bg, color: chip.color,
-                              padding: '2px 8px', borderRadius: 20, fontSize: 11.5, fontWeight: 700,
-                            }}>
-                              {b.status}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 700 }}>
-                            Rs. {(b.grand_total || 0).toLocaleString()}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <div className="table-responsive">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Booking ID</th>
+                        <th>Customer</th>
+                        <th>Dress</th>
+                        <th>Delivery</th>
+                        <th>Return</th>
+                        <th>Status</th>
+                        <th style={{ textAlign: 'right' }}>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentBookings.map(b => {
+                        const chip = STATUS_CHIP[b.status] || STATUS_CHIP.None;
+                        return (
+                          <tr key={b.id}>
+                            <td>
+                              <span style={{ fontWeight: 700, color: '#7c3aed', fontFamily: 'monospace', fontSize: 13 }}>
+                                #{b.booking_no}
+                              </span>
+                            </td>
+                            <td style={{ fontWeight: 600 }}>{b.customer_name || '—'}</td>
+                            <td style={{ color: '#64748b' }}>{b.dresses_summary || '—'}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{formatDate(b.delivery_date)}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{formatDate(b.returning_date)}</td>
+                            <td>
+                              <span style={{
+                                background: chip.bg, color: chip.color,
+                                padding: '2px 8px', borderRadius: 20, fontSize: 11.5, fontWeight: 700,
+                              }}>
+                                {b.status}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                              Rs. {(b.grand_total || 0).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
                 <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#64748b' }}>
                   <span>{recentBookings.length} recent booking{recentBookings.length !== 1 ? 's' : ''}</span>
                   <span style={{ fontWeight: 700, color: '#0f172a' }}>

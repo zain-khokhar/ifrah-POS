@@ -42,7 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── Audit (Owner only) ────────────────────────────────────────────────────
   audit: {
-    list: () => ipcRenderer.invoke('audit:list'),
+    list: (params) => ipcRenderer.invoke('audit:list', params),
   },
 
   // ── Lists — learning dropdowns ────────────────────────────────────────────
@@ -169,8 +169,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ─── Migration (Phase 11 MS Access) ───────────────────────────────────────
   migration: {
-    preview: (params) => ipcRenderer.invoke('migration:preview', params),
-    run:     (params) => ipcRenderer.invoke('migration:run', params),
+    browseFile: ()       => ipcRenderer.invoke('migration:browseFile'),
+    preview:    (params) => ipcRenderer.invoke('migration:preview', params),
+    run:        (params) => ipcRenderer.invoke('migration:run', params),
   },
 
   // ─── Sync (Phase 13 Supabase Cloud & Offline Sync) ────────────────────────

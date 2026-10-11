@@ -9,6 +9,7 @@ import {
   Camera, Printer, Sparkles,
 } from 'lucide-react';
 import ReceiptModal from '@/components/ReceiptModal';
+import { formatDate } from '@/lib/dateUtils';
 
 const FILTERS = [
   { id: 'all',       label: 'Sabhi Returns' },
@@ -267,7 +268,7 @@ function ReturnsContent() {
               </div>
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
+            <div className="table-responsive">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -331,8 +332,8 @@ function ReturnsContent() {
                         {/* Delivered Date */}
                         <td>
                           {r.delivered_on ? (
-                            <span style={{ fontSize: 12.5, color: '#16a34a', fontWeight: 600 }}>
-                              ✓ {r.delivered_on}
+                            <span style={{ fontSize: 12.5, color: '#16a34a', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              ✓ {formatDate(r.delivered_on)}
                             </span>
                           ) : (
                             <span style={{ fontSize: 12, color: '#94a3b8' }}>
@@ -343,12 +344,12 @@ function ReturnsContent() {
 
                         {/* Expected Return */}
                         <td>
-                          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 13 }}>
-                            {r.returning_date}
+                          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 13, whiteSpace: 'nowrap' }}>
+                            {formatDate(r.returning_date)}
                           </div>
                           {r.returned_on && (
-                            <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
-                              <Check size={11} /> Returned: {r.returned_on}
+                            <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' }}>
+                              <Check size={11} /> Returned: {formatDate(r.returned_on)}
                             </div>
                           )}
                         </td>

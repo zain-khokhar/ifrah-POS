@@ -8,6 +8,7 @@ import {
   Calendar, Search, X, RefreshCw, CheckCircle2, Lock,
   Sparkles, Layers,
 } from 'lucide-react';
+import { formatDate } from '@/lib/dateUtils';
 
 const REPORT_CATEGORIES = [
   {
@@ -231,6 +232,16 @@ function ReportsContent() {
 
   // Direct print handler
   async function handlePrint() {
+    if (!reportData) return;
+
+    // UI/UX Protection for large bulk data
+    if (reportData.rows?.length > 40) {
+      const proceed = window.confirm(
+        `Is report mein ${reportData.rows.length} records hain. Kya aap waqai is poori bulk report ko printer par bhejna chahte hain?\n\n(Mashwara: Baray data ke liye 'PDF' ya 'Excel' export behtar hai).`
+      );
+      if (!proceed) return;
+    }
+
     setPrinting(true);
     setActionMessage('');
     try {
@@ -240,7 +251,7 @@ function ReportsContent() {
       });
       if (res?.ok) {
         setActionMessage('✓ Report sent to printer successfully.');
-      } else if (res?.message) {
+      } else if (!res?.canceled && res?.message) {
         alert(res.message);
       }
     } catch (err) {
@@ -360,7 +371,7 @@ function ReportsContent() {
         )}
 
         {/* ── Two Column Layout: Left Sidebar + Right Content ──── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '290px 1fr', gap: 18, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '270px minmax(0, 1fr)', gap: 18, alignItems: 'start', width: '100%', minWidth: 0 }}>
 
           {/* ── Left Sidebar: Report Selector ─────────────────── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -426,7 +437,7 @@ function ReportsContent() {
           </div>
 
           {/* ── Right Content: Filter Bar & Report Viewer ──────── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0, width: '100%' }}>
 
             {/* ── Top Filter Bar & Actions ───────────────────────── */}
             <div className="card" style={{ padding: '14px 16px' }}>
@@ -602,7 +613,7 @@ function ReportsContent() {
             )}
 
             {/* ── Report Data Table ──────────────────────────────── */}
-            <div className="card" style={{ overflow: 'hidden' }}>
+            <div className="card" style={{ overflow: 'hidden', minWidth: 0, width: '100%' }}>
               {loading ? (
                 <div style={{ padding: 48, textAlign: 'center', color: '#94a3b8' }}>
                   <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
@@ -619,8 +630,8 @@ function ReportsContent() {
                   </div>
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto', maxHeight: '68vh' }}>
-                  <table className="data-table">
+                <div className="table-responsive" style={{ maxHeight: '68vh', width: '100%', overflowX: 'auto', display: 'block' }}>
+                  <table className="data-table" style={{ width: 'max-content', minWidth: '100%' }}>
                     <thead>
                       <tr>
                         {reportData.columns.map(col => (
@@ -687,6 +698,15 @@ function ReportsContent() {
                                   <span className="badge badge-danger">
                                     {val}
                                   </span>
+                                </td>
+                              );
+                            }
+
+                            const isDateCol = (col.key.includes('date') || col.key === 'paid_on' || col.key === 'delivered_on' || col.key === 'returned_on');
+                            if (isDateCol && val) {
+                              return (
+                                <td key={col.key} style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>
+                                  {formatDate(val)}
                                 </td>
                               );
                             }

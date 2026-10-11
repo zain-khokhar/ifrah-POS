@@ -303,7 +303,7 @@ ipcMain.handle('users:create',  safeHandler((event, input)  => auth.createUser(g
 ipcMain.handle('users:disable', safeHandler((event, userId) => auth.disableUser(getSession(event), userId)));
 
 // ─── IPC — Audit ───────────────────────────────────────────────────────────
-ipcMain.handle('audit:list', safeHandler((event) => auth.listAuditLogs(getSession(event))));
+ipcMain.handle('audit:list', safeHandler((event, params) => auth.listAuditLogs(getSession(event), params)));
 
 // ─── IPC — Lists (learning dropdowns) ──────────────────────────────────────
 ipcMain.handle('lists:get',     safeHandler((_e, tableName)           => ({ ok: true, data: lists.list(tableName) })));
@@ -374,7 +374,7 @@ ipcMain.handle('settings:update', safeHandler((event, input) => settingsService.
 
 // ─── IPC — Receipts & Printing (Phase 8) ────────────────────────────────────
 ipcMain.handle('receipts:getData',      safeHandler((event, bookingId) => receiptsService.getReceiptData(getSession(event), bookingId)));
-ipcMain.handle('receipts:getPrinters',  safeHandler((event)            => ({ ok: true, data: receiptsService.getPrinters(getSession(event)) })));
+ipcMain.handle('receipts:getPrinters',  safeHandler(async (event)      => ({ ok: true, data: await receiptsService.getPrinters(getSession(event)) })));
 ipcMain.handle('receipts:generateHtml', safeHandler((event, params)    => receiptsService.generateHtml(getSession(event), params)));
 ipcMain.handle('receipts:print',        safeHandler((event, params)    => receiptsService.printDirect(getSession(event), params)));
 ipcMain.handle('receipts:savePdf',      safeHandler((event, params)    => receiptsService.savePdf(getSession(event), params)));
@@ -400,6 +400,19 @@ ipcMain.handle('reports:exportEverything', safeHandler((event, params) => report
 ipcMain.handle('reports:printDailyPack',   safeHandler((event, params) => reports.printDailyPack(getSession(event), params)));
 
 // ─── IPC — Migration (Phase 11 MS Access) ──────────────────────────────────
+ipcMain.handle('migration:browseFile', safeHandler(async (event) => {
+  protect(event, [ROLES.OWNER]);
+  const res = await dialog.showOpenDialog({
+    title: 'Select MS Access CSV File (bookings.csv or booking_details.csv)',
+    properties: ['openFile'],
+    filters: [
+      { name: 'CSV / Data Files', extensions: ['csv', 'txt'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  });
+  if (res.canceled || !res.filePaths.length) return { ok: false, canceled: true };
+  return { ok: true, filePath: res.filePaths[0] };
+}));
 ipcMain.handle('migration:preview', safeHandler((event, params) => {
   protect(event, [ROLES.OWNER]);
   return { ok: true, data: importAccessData({ ...params, dryRun: true }) };
