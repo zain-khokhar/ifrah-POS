@@ -636,8 +636,7 @@ export default function CustomersPage() {
               )}
             </div>
           ) : (
-            <div className="table-responsive">
-              <table className="data-table">
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>#</th>
@@ -704,7 +703,6 @@ export default function CustomersPage() {
                 ))}
               </tbody>
             </table>
-          </div>
           )}
           {customers.length > 0 && (
             <div style={{ padding: '10px 16px', borderTop: '1px solid #f1f5f9', fontSize: 12, color: '#94a3b8' }}>

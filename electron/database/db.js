@@ -216,33 +216,6 @@ function runMigrations(db) {
     try { db.exec(`ALTER TABLE bookings ADD COLUMN clash_note TEXT DEFAULT NULL;`); } catch {}
   }
 
-  // Smart Historical Data Cleanup:
-  // If historical bookings from past dates (returning_date < date('now')) are still open,
-  // mark them Closed and Returned so they don't clog active Deliveries/Returns or trigger fake clashes
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    db.prepare(`
-      UPDATE bookings
-      SET status = 'Closed',
-          delivered_on = COALESCE(delivered_on, delivery_date),
-          returned_on = COALESCE(returned_on, returning_date),
-          return_condition = COALESCE(return_condition, 'OK'),
-          clash_flag = 0,
-          clash_note = NULL
-      WHERE returning_date < ?
-        AND (status IS NULL OR lower(status) != 'closed' OR returned_on IS NULL OR clash_flag = 1)
-    `).run(today);
-
-    db.prepare(`
-      UPDATE booking_items
-      SET is_ready = 1
-      WHERE booking_id IN (SELECT id FROM bookings WHERE lower(status) = 'closed')
-        AND is_ready = 0
-    `).run();
-  } catch (err) {
-    // Non-blocking
-  }
-
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS sync_state (
       key TEXT PRIMARY KEY,

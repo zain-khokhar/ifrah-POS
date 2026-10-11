@@ -1,5 +1,6 @@
 {
   "name": "ifrah-pos",
+  "productName": "Ifrah Collection POS",
   "version": "0.1.0",
   "private": true,
   "description": "Ifrah Collection — Offline-First Dress Rental POS System",
@@ -19,6 +20,7 @@
   "dependencies": {
     "@hookform/resolvers": "^3.0.0",
     "better-sqlite3": "^11.0.0",
+    "call-bind-apply-helpers": "^1.0.2",
     "clsx": "^2.0.0",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.469.0",
@@ -56,6 +58,7 @@
     "files": [
       "out/**/*",
       "electron/**/*",
+      "scripts/**/*",
       "node_modules/**/*",
       "package.json"
     ],

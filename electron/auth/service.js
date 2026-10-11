@@ -295,31 +295,13 @@ function createAuthService(db, options = {}) {
     `).all();
   }
 
-  function listAuditLogs(session, options = {}) {
+  function listAuditLogs(session) {
     requireRole(session, [ROLES.OWNER]);
-    const limit = options?.limit;
-    const offset = options?.offset || 0;
-
-    let query = `
-      SELECT audit_logs.*, users.username, users.role AS user_role, users.full_name AS user_fullname
+    return db.prepare(`
+      SELECT audit_logs.*, users.username
       FROM audit_logs LEFT JOIN users ON users.id = audit_logs.user_id
       ORDER BY audit_logs.created_at DESC
-    `;
-    const params = [];
-    if (limit && Number(limit) > 0) {
-      query += ` LIMIT ? OFFSET ?`;
-      params.push(Number(limit), Number(offset));
-    }
-
-    const logs = db.prepare(query).all(...params);
-    const totalRow = db.prepare('SELECT COUNT(*) AS count FROM audit_logs').get();
-    const total = totalRow?.count || logs.length;
-
-    return {
-      items: logs,
-      total,
-      hasMore: (Number(offset) + logs.length) < total,
-    };
+    `).all();
   }
 
   return {

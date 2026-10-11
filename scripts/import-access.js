@@ -252,24 +252,9 @@ function resolveDbPath(customPath) {
 // ─── CORE IMPORT ENGINE ──────────────────────────────────────────────────────
 
 function importAccessData(options = {}) {
-  const isDryRun   = options.dryRun !== false;
-  let bookingsPath = options.bookingsPath;
-  let detailsPath  = options.detailsPath;
-  if (options.csvPath && fs.existsSync(options.csvPath)) {
-    const dir = path.dirname(options.csvPath);
-    const base = path.basename(options.csvPath).toLowerCase();
-    if (base.includes('detail')) {
-      detailsPath = options.csvPath;
-      const companion = path.join(dir, 'bookings.csv');
-      if (fs.existsSync(companion)) bookingsPath = companion;
-    } else {
-      bookingsPath = options.csvPath;
-      const companion = path.join(dir, 'booking_details.csv');
-      if (fs.existsSync(companion)) detailsPath = companion;
-    }
-  }
-  bookingsPath = bookingsPath || path.join(__dirname, 'sample-data', 'bookings.csv');
-  detailsPath  = detailsPath  || path.join(__dirname, 'sample-data', 'booking_details.csv');
+  const isDryRun     = options.dryRun !== false;
+  const bookingsPath = options.bookingsPath || path.join(__dirname, 'sample-data', 'bookings.csv');
+  const detailsPath  = options.detailsPath  || path.join(__dirname, 'sample-data', 'booking_details.csv');
   const dbPath       = resolveDbPath(options.dbPath);
   const logOutput    = options.silent ? () => {} : console.log;
 
@@ -671,19 +656,11 @@ function importAccessData(options = {}) {
       const customerId = customerIdMap.get(custKey);
       const cityId     = getOrCreateCity(b.city);
 
-      const todayIso = new Date().toISOString().slice(0, 10);
-      const isHistorical = b.returningDate && b.returningDate < todayIso;
-      const finalStatus = isHistorical ? 'Closed' : b.status;
-      const deliveredOn = isHistorical ? (b.deliveryDate || b.bookingDate) : null;
-      const returnedOn  = isHistorical ? b.returningDate : null;
-      const returnCond  = isHistorical ? 'OK' : null;
-
       // Insert booking with preserved booking ID and booking_no
       const bookingRes = db.prepare(`
         INSERT INTO bookings (
           id, booking_no, customer_id, city_id, status,
           booking_date, delivery_date, returning_date,
-          delivered_on, returned_on, return_condition,
           booking_month, total_returning_days,
           relative_name, relative_relation,
           notes, security_deposit, discount,
@@ -692,7 +669,6 @@ function importAccessData(options = {}) {
         ) VALUES (
           ?, ?, ?, ?, ?,
           ?, ?, ?,
-          ?, ?, ?,
           ?, ?,
           ?, ?,
           ?, 0, 0,
@@ -700,9 +676,8 @@ function importAccessData(options = {}) {
           ?, ?
         )
       `).run(
-        b.bookingNo, b.bookingNo, customerId, cityId, finalStatus,
+        b.bookingNo, b.bookingNo, customerId, cityId, b.status,
         b.bookingDate, b.deliveryDate, b.returningDate,
-        deliveredOn, returnedOn, returnCond,
         b.bookingMonth, b.totalReturningDays,
         b.relativeName || null, b.relativeRelation || null,
         b.notes || null,
@@ -725,15 +700,13 @@ function importAccessData(options = {}) {
             dress_id, dress_name_snapshot, size,
             quantity, rate, line_total,
             description, jewellery, clutch_purse,
-            hand_bag, double_dupatta, shoes,
-            is_ready, item_condition
+            hand_bag, double_dupatta, shoes
           ) VALUES (
             ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
-            ?, ?, ?,
-            ?, ?
+            ?, ?, ?
           )
         `).run(
           bookingId, item.lineNo, item.detailNo,
@@ -741,8 +714,7 @@ function importAccessData(options = {}) {
           item.quantity, item.rate, item.lineTotal,
           item.description || null,
           item.jewellery, item.clutchPurse,
-          item.handBag, item.doubleDupatta, item.shoes,
-          isHistorical ? 1 : 0, 'OK'
+          item.handBag, item.doubleDupatta, item.shoes
         );
         enqueueOutboxRow('booking_items', itemRes.lastInsertRowid);
         stats.itemsImported++;

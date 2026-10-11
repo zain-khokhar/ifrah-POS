@@ -133,60 +133,56 @@ function createSyncService(db, options = {}) {
 
   const client = customClient || defaultClient;
 
-  // ─── PUSH OUTBOX (THROTTLED & CHUNKED BULK UPLOAD) ───────────────────────
-  async function pushOutbox(batchSize = 25, maxBatches = 8) {
-    let totalPushed = 0;
-    let totalErrors = 0;
+  // ─── PUSH OUTBOX ──────────────────────────────────────────────────────────
+  async function pushOutbox(batchSize = 50) {
+    const items = getPendingOutbox(db, batchSize);
+    if (!items || items.length === 0) return { pushed: 0, errors: 0 };
+
+    let pushedCount = 0;
+    let errorCount = 0;
+
     const { shopId } = getCredentials();
 
-    for (let batchNum = 0; batchNum < maxBatches; batchNum++) {
-      const items = getPendingOutbox(db, batchSize);
-      if (!items || items.length === 0) break;
+    for (const item of items) {
+      try {
+        let payload = JSON.parse(item.payload || '{}');
+        payload.shop_id = shopId;
+        payload.sync_id = item.record_sync_id;
 
-      for (const item of items) {
-        try {
-          let payload = JSON.parse(item.payload || '{}');
-          payload.shop_id = shopId;
-          payload.sync_id = item.record_sync_id;
-
-          // Strip local SQLite transient columns to prevent remote collision
-          if (item.table_name !== 'settings') {
-            delete payload.id;
-          }
-          delete payload.sync_status;
-          delete payload.last_synced_at;
-
-          // Map column differences between SQLite and Supabase Postgres schema
-          if (item.table_name === 'customers') {
-            if (payload.phone2 !== undefined) {
-              payload.alt_phone = payload.phone2;
-              delete payload.phone2;
-            }
-          } else if (item.table_name === 'dresses') {
-            if (payload.code !== undefined) {
-              payload.dress_code = payload.code;
-              delete payload.code;
-            }
-            if (payload.rental_price !== undefined) {
-              payload.default_rate = payload.rental_price;
-              delete payload.rental_price;
-            }
-          }
-
-          await client.upsert(item.table_name, [payload]);
-          markOutboxDone(db, item.id, item.table_name, item.record_sync_id);
-          totalPushed++;
-        } catch (err) {
-          totalErrors++;
-          markOutboxFailed(db, item.id, err.message);
+        // Strip local SQLite transient columns to prevent remote collision
+        if (item.table_name !== 'settings') {
+          delete payload.id;
         }
-      }
+        delete payload.sync_status;
+        delete payload.last_synced_at;
 
-      // Non-blocking delay between batches to keep Node/Electron UI responsive
-      await new Promise(r => setTimeout(r, 60));
+        // Map column differences between SQLite and Supabase Postgres schema
+        if (item.table_name === 'customers') {
+          if (payload.phone2 !== undefined) {
+            payload.alt_phone = payload.phone2;
+            delete payload.phone2;
+          }
+        } else if (item.table_name === 'dresses') {
+          if (payload.code !== undefined) {
+            payload.dress_code = payload.code;
+            delete payload.code;
+          }
+          if (payload.rental_price !== undefined) {
+            payload.default_rate = payload.rental_price;
+            delete payload.rental_price;
+          }
+        }
+
+        await client.upsert(item.table_name, [payload]);
+        markOutboxDone(db, item.id, item.table_name, item.record_sync_id);
+        pushedCount++;
+      } catch (err) {
+        errorCount++;
+        markOutboxFailed(db, item.id, err.message);
+      }
     }
 
-    return { pushed: totalPushed, errors: totalErrors };
+    return { pushed: pushedCount, errors: errorCount };
   }
 
   // ─── RECALCULATE BOOKING TOTALS ───────────────────────────────────────────
@@ -228,7 +224,6 @@ function createSyncService(db, options = {}) {
 
     try {
       // Find active bookings that have overlapping delivery/returning dates for the same dress
-      // Only active future/current bookings are checked (historical completed bookings are never clashed)
       const clashingPairs = db.prepare(`
         SELECT DISTINCT
           b1.id AS b1_id, b1.booking_no AS b1_no,
@@ -240,12 +235,9 @@ function createSyncService(db, options = {}) {
         JOIN bookings b2 ON b2.id = bi2.booking_id
         WHERE bi1.deleted_at IS NULL AND bi2.deleted_at IS NULL
           AND b1.deleted_at IS NULL AND b2.deleted_at IS NULL
-          AND lower(b1.status) NOT IN ('closed', 'cancelled')
-          AND lower(b2.status) NOT IN ('closed', 'cancelled')
+          AND b1.status != 'Closed' AND b2.status != 'Closed'
           AND b1.delivery_date IS NOT NULL AND b1.returning_date IS NOT NULL
           AND b2.delivery_date IS NOT NULL AND b2.returning_date IS NOT NULL
-          AND b1.returning_date >= date('now')
-          AND b2.returning_date >= date('now')
           AND b1.delivery_date <= b2.returning_date
           AND b1.returning_date >= b2.delivery_date
           AND b1.id < b2.id

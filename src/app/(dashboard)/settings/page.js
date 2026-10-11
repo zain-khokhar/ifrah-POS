@@ -5,7 +5,7 @@ import {
   Settings, Store, Printer, Check, RefreshCw,
   AlertCircle, ShieldAlert, Cpu, FileSpreadsheet, Layers, Database,
   Cloud, CloudOff, CheckCircle2, Monitor, AlertTriangle, ArrowRight,
-  Key, Copy, ShieldCheck, FolderOpen, FileText,
+  Key, Copy, ShieldCheck,
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -32,8 +32,6 @@ export default function SettingsPage() {
   const [migrationLoading, setMigrationLoading] = useState(false);
   const [migrationResult, setMigrationResult]   = useState(null);
   const [migrationError, setMigrationError]     = useState('');
-  const [selectedCsvPath, setSelectedCsvPath]   = useState('');
-  const [showFormatGuide, setShowFormatGuide]   = useState(false);
 
   // Available printers
   const [printers, setPrinters] = useState([]);
@@ -186,18 +184,6 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleBrowseCsv() {
-    try {
-      const res = await window.electronAPI?.migration?.browseFile?.();
-      if (res?.ok && res.filePath) {
-        setSelectedCsvPath(res.filePath);
-        setMigrationError('');
-      }
-    } catch (err) {
-      setMigrationError(`File choose karne mein masla aya: ${err.message}`);
-    }
-  }
-
   async function handleMigration(isDryRun) {
     if (migrationLoading || userRole !== 'owner') return;
     setMigrationLoading(true);
@@ -206,7 +192,7 @@ export default function SettingsPage() {
       const fn = isDryRun
         ? window.electronAPI?.migration?.preview
         : window.electronAPI?.migration?.run;
-      const res = await fn?.({ csvPath: selectedCsvPath || undefined });
+      const res = await fn?.({});
       if (res?.ok && res.data) {
         setMigrationResult(res.data);
       } else {
@@ -274,10 +260,10 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 20, width: '100%', minWidth: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
           {/* ── CARD 1: Shop Information ── */}
-          <div className="card" style={{ minWidth: 0 }}>
+          <div className="card">
             <div className="card-header">
               <h2 className="card-title">
                 <Store size={15} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle', color: '#7c3aed' }} />
@@ -362,7 +348,7 @@ export default function SettingsPage() {
           </div>
 
           {/* ── CARD 2: Receipt & Hardware Settings ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div className="card">
               <div className="card-header">
                 <h2 className="card-title">
@@ -510,69 +496,16 @@ export default function SettingsPage() {
             {/* MS Access Data Migration Card (Phase 11 - Owner Only) */}
             {isOwner && (
               <div className="card" style={{ border: '1px solid #c7d2fe', background: '#f5f3ff' }}>
-                <div className="card-header" style={{ borderBottom: '1px solid #e0e7ff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="card-header" style={{ borderBottom: '1px solid #e0e7ff' }}>
                   <h2 className="card-title" style={{ color: '#4338ca' }}>
                     <Database size={15} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle', color: '#6366f1' }} />
-                    MS Access Data Migration
+                    MS Access Data Migration (Phase 11)
                   </h2>
-                  <button
-                    type="button"
-                    onClick={() => setShowFormatGuide(!showFormatGuide)}
-                    style={{
-                      background: 'none', border: 'none', color: '#6366f1',
-                      fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                    }}
-                  >
-                    <FileText size={13} /> {showFormatGuide ? 'Hide Format Guide' : 'CSV Format Guide'}
-                  </button>
                 </div>
                 <div className="card-body">
                   <p style={{ fontSize: 12.5, color: '#4f46e5', marginBottom: 12, lineHeight: 1.5 }}>
-                    Purane Microsoft Access system (Jan–Oct 2026) ka tamam data (359 Bookings, 368 Lines, Grand Total Rs 789,801) import karein. Historical completed bookings khud-ba-khud active delivery pipeline se bahar rehti hain.
+                    Purane Microsoft Access system (Jan–Oct 2026) ka tamam data (359 Bookings, 368 Lines, Grand Total Rs 789,801) import karein. Dry run se pehle verification hoti hai aur real run atomic transaction mein execute hota hai.
                   </p>
-
-                  {/* CSV File Selector */}
-                  <div style={{ marginBottom: 14 }}>
-                    <label className="form-label" style={{ fontSize: 11.5, color: '#3730a3', marginBottom: 4 }}>
-                      Select Access Export File (bookings.csv ya booking_details.csv)
-                    </label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={selectedCsvPath || 'Default: sample-data/bookings.csv'}
-                        readOnly
-                        style={{ fontSize: 12, background: '#ffffff', color: selectedCsvPath ? '#0f172a' : '#64748b' }}
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={handleBrowseCsv}
-                        style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}
-                      >
-                        <FolderOpen size={14} /> Browse File
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Expandable Format Guide Card */}
-                  {showFormatGuide && (
-                    <div style={{
-                      background: '#ffffff', border: '1px solid #c7d2fe', borderRadius: 8,
-                      padding: '12px 14px', marginBottom: 14, fontSize: 12, color: '#334155',
-                    }}>
-                      <div style={{ fontWeight: 700, color: '#312e81', marginBottom: 6 }}>
-                        📋 Expected CSV Columns Reference:
-                      </div>
-                      <div style={{ lineHeight: 1.6, marginBottom: 8 }}>
-                        • <strong>bookings.csv</strong>: <code>BookingID, CustomerName, Phone, Phone2, CNIC, City, Cast, RelationType, RelationName, Address, BookingDate, DeliveryDate, ReturningDate, Status, AdvanceAmount, AdvanceMethod, Notes</code><br />
-                        • <strong>booking_details.csv</strong>: <code>DetailID, BookingID, Quantity, Rate, Amount, DressName, Size, Description, Jewellery, ClutchPurse, HandBag, DoubleDupatta, Shoes</code>
-                      </div>
-                      <div style={{ padding: '6px 10px', background: '#ecfdf5', borderRadius: 6, color: '#065f46', fontSize: 11.5 }}>
-                        ✓ <strong>Smart Historical Handling:</strong> Jin bookings ki Return Date guzar chuki hai, unhein khud-ba-khud &ldquo;Returned &amp; Closed&rdquo; mark kiya jata hai taake delivery section mein ghalat notifications na aaein.
-                      </div>
-                    </div>
-                  )}
 
                   <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                     <button
@@ -817,6 +750,30 @@ export default function SettingsPage() {
                 </div>
               </div>
             )}
+
+            {/* App / Architecture Card */}
+            <div className="card">
+              <div className="card-header">
+                <h2 className="card-title">
+                  <Cpu size={15} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle', color: '#64748b' }} />
+                  System &amp; Hardware Status
+                </h2>
+              </div>
+              <div className="card-body">
+                {[
+                  { label: 'Active Role',       value: userRole.toUpperCase() },
+                  { label: 'Installed Printers', value: `${printers.length} detected on Windows` },
+                  { label: 'PDF Generation',    value: 'Native Electron printToPDF (Enabled)' },
+                  { label: 'Receipt Engine',    value: 'HTML5 / CSS Paged Media + Urdu Fonts' },
+                  { label: 'Database',          value: 'SQLite WAL mode (Safe atomic transactions)' },
+                ].map(i => (
+                  <div key={i.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f1f5f9', fontSize: 12.5 }}>
+                    <span style={{ color: '#64748b', fontWeight: 500 }}>{i.label}</span>
+                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{i.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
         </div>

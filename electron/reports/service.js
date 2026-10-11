@@ -1020,14 +1020,11 @@ function createReportsService(db, settingsService) {
 
       win.webContents.once('did-finish-load', async () => {
         try {
-          // Allow Chromium to finish layout and font rendering
-          await new Promise(r => setTimeout(r, 250));
-
           const pdfBuffer = await win.webContents.printToPDF({
             printBackground: true,
             pageSize: 'A4',
             landscape: reportData.columns?.length > 7,
-            margins: { marginType: 'default' },
+            margins: { marginType: 'none' },
           });
           try { win.destroy(); win = null; } catch {}
 
@@ -1079,45 +1076,29 @@ function createReportsService(db, settingsService) {
         webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
       });
 
-      let timeoutId = setTimeout(() => {
-        try { if (win) { win.destroy(); win = null; } } catch {}
-        resolve({ ok: false, canceled: true, message: 'Print operation timed out.' });
-      }, 45000);
-
       win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
-      win.webContents.once('did-finish-load', async () => {
-        try {
-          await new Promise(r => setTimeout(r, 200));
+      win.webContents.once('did-finish-load', () => {
+        const printOptions = {
+          silent: Boolean(silent || printerName),
+          printBackground: true,
+          pageSize: 'A4',
+          landscape: reportData.columns?.length > 7,
+          margins: { marginType: 'none' },
+        };
+        if (printerName) printOptions.deviceName = printerName;
 
-          const printOptions = {
-            silent: Boolean(silent || printerName),
-            printBackground: true,
-            pageSize: 'A4',
-            landscape: reportData.columns?.length > 7,
-            margins: { marginType: 'default' },
-          };
-          if (printerName) printOptions.deviceName = printerName;
-
-          win.webContents.print(printOptions, (success, failureReason) => {
-            clearTimeout(timeoutId);
-            try { win.destroy(); win = null; } catch {}
-            if (!success) {
-              // Graceful cancellation handling — does not crash UI
-              resolve({ ok: false, canceled: true, message: failureReason || 'Print canceled.' });
-            } else {
-              resolve({ ok: true, reportType });
-            }
-          });
-        } catch (err) {
-          clearTimeout(timeoutId);
-          try { if (win) win.destroy(); } catch {}
-          resolve({ ok: false, canceled: true, message: err.message });
-        }
+        win.webContents.print(printOptions, (success, failureReason) => {
+          try { win.destroy(); win = null; } catch {}
+          if (!success) {
+            reject(new Error(failureReason || 'Print canceled or failed.'));
+          } else {
+            resolve({ ok: true, reportType });
+          }
+        });
       });
 
       win.webContents.once('did-fail-load', (_e, code, desc) => {
-        clearTimeout(timeoutId);
         try { win.destroy(); win = null; } catch {}
         reject(new Error(`Failed to load report HTML for printing: ${desc} (${code})`));
       });

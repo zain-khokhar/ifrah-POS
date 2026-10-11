@@ -14,7 +14,14 @@
  *  - Multi-tab 'Export Everything' workbook for emergency offline backup.
  */
 
-const ExcelJS = require('exceljs');
+let ExcelJS = null;
+function getExcelJS() {
+  if (!ExcelJS) {
+    ExcelJS = require('exceljs');
+  }
+  return ExcelJS;
+}
+
 
 const BRAND_PURPLE = '6B21A8';
 const HEADER_FILL = {
@@ -61,7 +68,8 @@ const TOTAL_BORDER = {
  * @returns {Promise<Buffer>}
  */
 async function buildExcelReport({ title, subtitle = '', columns, rows, totals = null }) {
-  const workbook = new ExcelJS.Workbook();
+  const Excel = getExcelJS();
+  const workbook = new Excel.Workbook();
   workbook.creator = 'Ifrah Collection POS';
   workbook.lastModifiedBy = 'Ifrah Collection POS';
   workbook.created = new Date();
@@ -185,7 +193,8 @@ async function buildExcelReport({ title, subtitle = '', columns, rows, totals = 
  * @returns {Promise<Buffer>}
  */
 async function buildFullSystemExcel(systemData) {
-  const workbook = new ExcelJS.Workbook();
+  const Excel = getExcelJS();
+  const workbook = new Excel.Workbook();
   workbook.creator = 'Ifrah Collection POS';
   workbook.lastModifiedBy = 'Ifrah Collection POS';
   workbook.created = new Date();

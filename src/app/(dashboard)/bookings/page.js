@@ -7,7 +7,6 @@ import {
   Edit, Trash2, Eye, Filter, Printer,
 } from 'lucide-react';
 import ReceiptModal from '@/components/ReceiptModal';
-import { formatDate } from '@/lib/dateUtils';
 
 
 const STATUS_CHIP = {
@@ -132,55 +131,54 @@ export default function BookingsPage() {
               )}
             </div>
           ) : (
-            <div className="table-responsive">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Booking #</th>
-                    <th>Customer</th>
-                    <th>Contact</th>
-                    <th>Delivery</th>
-                    <th>Return</th>
-                    <th>Status</th>
-                    <th style={{ textAlign: 'right' }}>Total</th>
-                    <th style={{ textAlign: 'right' }}>Remaining</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bookings.map(b => (
-                    <tr key={b.id}>
-                      <td>
-                        <span style={{ fontWeight: 800, color: '#7c3aed', fontFamily: 'monospace', fontSize: 14 }}>
-                          #{b.booking_no}
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Booking #</th>
+                  <th>Customer</th>
+                  <th>Contact</th>
+                  <th>Delivery</th>
+                  <th>Return</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Total</th>
+                  <th style={{ textAlign: 'right' }}>Remaining</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bookings.map(b => (
+                  <tr key={b.id}>
+                    <td>
+                      <span style={{ fontWeight: 800, color: '#7c3aed', fontFamily: 'monospace', fontSize: 14 }}>
+                        #{b.booking_no}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 600, color: '#0f172a' }}>{b.customer_name || '—'}</td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 12.5, color: '#64748b' }}>{b.customer_phone || '—'}</td>
+                    <td>
+                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{b.delivery_date || '—'}</div>
+                      {b.delivered_on ? (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
+                          ✓ Delivered
                         </span>
-                      </td>
-                      <td style={{ fontWeight: 600, color: '#0f172a' }}>{b.customer_name || '—'}</td>
-                      <td style={{ fontFamily: 'monospace', fontSize: 12.5, color: '#64748b' }}>{b.customer_phone || '—'}</td>
-                      <td>
-                        <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>{formatDate(b.delivery_date)}</div>
-                        {b.delivered_on ? (
-                          <span style={{ fontSize: 10.5, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
-                            ✓ Delivered
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: 10.5, color: '#94a3b8' }}>Pending</span>
-                        )}
-                      </td>
-                      <td>
-                        <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>{formatDate(b.returning_date)}</div>
-                        {b.returned_on ? (
-                          <span style={{ fontSize: 10.5, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
-                            ✓ Returned {b.return_condition ? `(${b.return_condition})` : ''}
-                          </span>
-                        ) : (b.delivered_on && b.returning_date && b.returning_date < new Date().toISOString().slice(0, 10)) ? (
-                          <span style={{ fontSize: 10.5, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
-                            ⚠️ Overdue
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: 10.5, color: '#94a3b8' }}>Awaiting</span>
-                        )}
-                      </td>
+                      ) : (
+                        <span style={{ fontSize: 10.5, color: '#94a3b8' }}>Pending</span>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{b.returning_date || '—'}</div>
+                      {b.returned_on ? (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
+                          ✓ Returned {b.return_condition ? `(${b.return_condition})` : ''}
+                        </span>
+                      ) : (b.delivered_on && b.returning_date && b.returning_date < new Date().toISOString().slice(0, 10)) ? (
+                        <span style={{ fontSize: 10.5, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
+                          ⚠️ Overdue
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 10.5, color: '#94a3b8' }}>Awaiting</span>
+                      )}
+                    </td>
                     <td>
                       <StatusChip status={b.status} />
                       {b.clash_flag === 1 && (
@@ -227,7 +225,6 @@ export default function BookingsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
           )}
 
           {bookings.length > 0 && (

@@ -6,7 +6,6 @@ import {
   CreditCard, Search, Calendar, RefreshCw, X,
   CheckCircle, AlertCircle, Ban, ArrowRight,
 } from 'lucide-react';
-import { formatDate } from '@/lib/dateUtils';
 
 const METHOD_BADGES = {
   cash:   { bg: '#dcfce7', color: '#16a34a', label: 'Cash' },
@@ -196,44 +195,43 @@ export default function PaymentsPage() {
               </div>
             </div>
           ) : (
-            <div className="table-responsive">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Booking #</th>
-                    <th>Customer</th>
-                    <th>Date</th>
-                    <th>Method</th>
-                    <th>Kind</th>
-                    <th>Received By</th>
-                    <th>Note</th>
-                    <th style={{ textAlign: 'right' }}>Amount</th>
-                    <th style={{ textAlign: 'center' }}>Status</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map(p => {
-                    const isVoid = p.is_void === 1;
-                    return (
-                      <tr key={p.id} style={{ opacity: isVoid ? 0.6 : 1, background: isVoid ? '#fef2f2' : undefined }}>
-                        <td style={{ fontFamily: 'monospace', fontSize: 12, color: '#94a3b8' }}>
-                          #{p.id}
-                        </td>
-                        <td>
-                          <Link
-                            href={`/bookings/new?id=${p.booking_id}`}
-                            style={{ fontWeight: 800, color: '#7c3aed', fontFamily: 'monospace', fontSize: 13, textDecoration: 'none' }}
-                          >
-                            #{p.booking_no}
-                          </Link>
-                        </td>
-                        <td>
-                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{p.customer_name || '—'}</div>
-                          <div style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace' }}>{p.customer_phone || ''}</div>
-                        </td>
-                        <td style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>{formatDate(p.paid_on)}</td>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Booking #</th>
+                  <th>Customer</th>
+                  <th>Date</th>
+                  <th>Method</th>
+                  <th>Kind</th>
+                  <th>Received By</th>
+                  <th>Note</th>
+                  <th style={{ textAlign: 'right' }}>Amount</th>
+                  <th style={{ textAlign: 'center' }}>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map(p => {
+                  const isVoid = p.is_void === 1;
+                  return (
+                    <tr key={p.id} style={{ opacity: isVoid ? 0.6 : 1, background: isVoid ? '#fef2f2' : undefined }}>
+                      <td style={{ fontFamily: 'monospace', fontSize: 12, color: '#94a3b8' }}>
+                        #{p.id}
+                      </td>
+                      <td>
+                        <Link
+                          href={`/bookings/new?id=${p.booking_id}`}
+                          style={{ fontWeight: 800, color: '#7c3aed', fontFamily: 'monospace', fontSize: 13, textDecoration: 'none' }}
+                        >
+                          #{p.booking_no}
+                        </Link>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{p.customer_name || '—'}</div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace' }}>{p.customer_phone || ''}</div>
+                      </td>
+                      <td style={{ fontSize: 12.5 }}>{p.paid_on || '—'}</td>
                       <td><MethodBadge method={p.payment_method} /></td>
                       <td>
                         <span style={{
@@ -285,7 +283,6 @@ export default function PaymentsPage() {
                 })}
               </tbody>
             </table>
-          </div>
           )}
 
           {payments.length > 0 && (

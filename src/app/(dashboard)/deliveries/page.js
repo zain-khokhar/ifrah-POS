@@ -9,7 +9,6 @@ import {
   PackageCheck, Printer,
 } from 'lucide-react';
 import ReceiptModal from '@/components/ReceiptModal';
-import { formatDate } from '@/lib/dateUtils';
 
 const FILTERS = [
   { id: 'today',     label: 'Aaj (Today)' },
@@ -263,7 +262,7 @@ function DeliveriesContent() {
               </div>
             </div>
           ) : (
-            <div className="table-responsive">
+            <div style={{ overflowX: 'auto' }}>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -271,7 +270,7 @@ function DeliveriesContent() {
                     <th>Customer</th>
                     <th>Delivery Date</th>
                     <th>Return Date</th>
-                    <th>Dresses & Preparation</th>
+                    <th>Dresses & Preparation (Night-before Ready)</th>
                     <th style={{ textAlign: 'right' }}>Payment Due</th>
                     <th>Status</th>
                     <th style={{ textAlign: 'center' }}>Actions</th>
@@ -321,25 +320,25 @@ function DeliveriesContent() {
 
                         {/* Delivery Date */}
                         <td>
-                          <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 13, whiteSpace: 'nowrap' }}>
-                            {formatDate(d.delivery_date)}
+                          <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 13 }}>
+                            {d.delivery_date}
                           </div>
                           {d.delivered_on && (
-                            <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' }}>
-                              <Check size={11} /> Delivered: {formatDate(d.delivered_on)}
+                            <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+                              <Check size={11} /> Delivered: {d.delivered_on}
                             </div>
                           )}
                         </td>
 
                         {/* Return Date */}
                         <td>
-                          <div style={{ fontSize: 13, color: '#475569', whiteSpace: 'nowrap' }}>
-                            {formatDate(d.returning_date)}
+                          <div style={{ fontSize: 13, color: '#475569' }}>
+                            {d.returning_date || '—'}
                           </div>
                         </td>
 
                         {/* Dresses & Night-before Prep Checklist */}
-                        <td style={{ minWidth: 200, maxWidth: 320 }}>
+                        <td style={{ minWidth: 260 }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                             {d.items && d.items.length > 0 ? (
                               d.items.map(it => {
