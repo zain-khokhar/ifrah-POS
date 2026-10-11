@@ -5,6 +5,9 @@ const path = require('path');
 const { getMachineHwid, getFriendlyMachineCode } = require('./hwid');
 const { createLicenseFile } = require('./validator');
 
+const DEFAULT_SUPABASE_URL = 'https://mumaiqbmpbobsaxewhta.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_zbk1eUYD021pqb219tHQ7Q_914lHuIc';
+
 function getSupabaseCredentials() {
   let url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
   let key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -26,7 +29,10 @@ function getSupabaseCredentials() {
     } catch {}
   }
 
-  return { url, key };
+  return {
+    url: url || DEFAULT_SUPABASE_URL,
+    key: key || DEFAULT_SUPABASE_ANON_KEY,
+  };
 }
 
 /**

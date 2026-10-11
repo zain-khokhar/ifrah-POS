@@ -27,8 +27,11 @@ function createSyncService(db, options = {}) {
   let isSyncing = false;
   let customClient = options.apiClient || null;
 
-  // Read credentials from .env.local or process.env
+  // Read credentials from .env.local or process.env (with production fallbacks)
   function getCredentials() {
+    const DEFAULT_SUPABASE_URL = 'https://mumaiqbmpbobsaxewhta.supabase.co';
+    const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_zbk1eUYD021pqb219tHQ7Q_914lHuIc';
+
     let url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
     let key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '';
 
@@ -48,6 +51,9 @@ function createSyncService(db, options = {}) {
         }
       } catch {}
     }
+
+    url = url || DEFAULT_SUPABASE_URL;
+    key = key || DEFAULT_SUPABASE_ANON_KEY;
 
     const stateRow = db.prepare(`SELECT value FROM sync_state WHERE key = 'shop_id'`).get();
     const shopId = stateRow?.value || 'ifrah-pos-default';

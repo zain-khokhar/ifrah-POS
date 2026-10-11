@@ -17,6 +17,7 @@
     "lint": "eslint src",
     "typecheck": "echo \"TypeScript check skipped (JS project)\"",
     "rebuild": "npx @electron/rebuild -f -o better-sqlite3 -t prod,dev",
+    "db:wipe": "node scripts/wipe-data.js",
     "test": "set ELECTRON_RUN_AS_NODE=1&& electron --test electron/auth/service.test.js electron/licensing/licensing.test.js electron/phase3/phase3.test.js electron/phase4/phase4.test.js electron/phase5/phase5.test.js electron/phase8/phase8.test.js electron/phase9/phase9.test.js electron/phase10/phase10.test.js electron/phase11/phase11.test.js electron/phase12/phase12.test.js electron/phase13/phase13.test.js electron/phase14/phase14.test.js"
   },
   "dependencies": {
