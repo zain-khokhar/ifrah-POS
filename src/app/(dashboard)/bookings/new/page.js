@@ -11,44 +11,33 @@ import {
 import { formatPakPhone, cnicMask, validateCustomer } from '@/lib/customerValidation';
 import ReceiptModal from '@/components/ReceiptModal';
 
-// ─── Date input (DD-MM-YYYY display, YYYY-MM-DD storage) ─────────────────────
-function DateInput({ value, onChange, placeholder, disabled, id }) {
-  const [display, setDisplay] = useState(() => {
-    if (!value) return '';
-    const parts = value.split('-');
-    return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : value;
-  });
-  const [prevValue, setPrevValue] = useState(value);
-
-  if (value !== prevValue) {
-    setPrevValue(value);
-    if (value) {
-      const [y, m, d] = value.split('-');
-      setDisplay(`${d}-${m}-${y}`);
-    } else {
-      setDisplay('');
-    }
-  }
-
-  function handleChange(e) {
-    const raw = e.target.value;
-    setDisplay(raw);
-    const m1 = raw.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-    if (m1) { onChange(`${m1[3]}-${m1[2]}-${m1[1]}`); return; }
-    const m2 = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (m2) { onChange(raw); return; }
-    onChange('');
-  }
-
+// ─── Date Picker (GUI Calendar Selector) ──────────────────────────────────────
+function DateInput({ value, onChange, disabled, id, min, max, style }) {
   return (
     <input
       id={id}
-      type="text"
+      type="date"
       className="form-input"
-      value={display}
-      onChange={handleChange}
-      placeholder={placeholder || 'DD-MM-YYYY'}
+      value={value || ''}
+      onChange={e => onChange(e.target.value)}
       disabled={disabled}
+      min={min}
+      max={max}
+      onClick={e => {
+        try {
+          if (!disabled && e.target.showPicker) {
+            e.target.showPicker();
+          }
+        } catch (_) {}
+      }}
+      style={{
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontSize: 13,
+        fontWeight: 600,
+        color: value ? '#0f172a' : '#94a3b8',
+        width: '100%',
+        ...style,
+      }}
     />
   );
 }
@@ -56,9 +45,9 @@ function DateInput({ value, onChange, placeholder, disabled, id }) {
 // ─── Learning Combobox for Lists (Cities, Casts, Relations, etc.) ─────────────
 function LearningCombobox({ tableName, value, onChange, placeholder, disabled, id }) {
   const [options, setOptions] = useState([]);
-  const [query,   setQuery]   = useState('');
-  const [open,    setOpen]    = useState(false);
-  const [adding,  setAdding]  = useState(false);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -175,9 +164,9 @@ function LearningCombobox({ tableName, value, onChange, placeholder, disabled, i
 // ─── Dress picker (learning combobox from dress catalogue) ────────────────────
 function DressPicker({ value, valueName, onSelect, disabled }) {
   const [options, setOptions] = useState([]);
-  const [query,   setQuery]   = useState('');
-  const [open,    setOpen]    = useState(false);
-  const [adding,  setAdding]  = useState(false);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -268,10 +257,10 @@ function DressPicker({ value, valueName, onSelect, disabled }) {
 // ─── Customer Card with Search + Inline New Customer Creation ────────────────
 function CustomerCard({ customer, onSelectCustomer, disabled }) {
   const [isCreating, setIsCreating] = useState(false);
-  const [query, setQuery]           = useState('');
-  const [results, setResults]       = useState([]);
-  const [open, setOpen]             = useState(false);
-  const [loading, setLoading]       = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const ref = useRef(null);
   const timer = useRef(null);
 
@@ -282,7 +271,7 @@ function CustomerCard({ customer, onSelectCustomer, disabled }) {
     city_id: '', cast_id: '', address: '', notes: '',
   });
   const [custSaving, setCustSaving] = useState(false);
-  const [custError, setCustError]   = useState('');
+  const [custError, setCustError] = useState('');
   const [custFieldErrors, setCustFieldErrors] = useState({});
 
   useEffect(() => {
@@ -367,7 +356,7 @@ function CustomerCard({ customer, onSelectCustomer, disabled }) {
   }
 
   return (
-    <div style={cardStyle}>
+    <div style={{ ...cardStyle, position: 'relative', zIndex: 20 }}>
       <div style={cardHdr}>
         <User size={16} color="#7c3aed" />
         <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>Customer Details</span>
@@ -702,7 +691,16 @@ function CustomerCard({ customer, onSelectCustomer, disabled }) {
 // ─── Accessory checkbox ───────────────────────────────────────────────────────
 function AccessCheck({ label, checked, onChange, disabled }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: disabled ? 'default' : 'pointer', fontSize: 12, color: checked ? '#7c3aed' : '#64748b', fontWeight: checked ? 700 : 400, userSelect: 'none' }}>
+    <label style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      cursor: disabled ? 'default' : 'pointer', fontSize: 12,
+      padding: '4px 9px', borderRadius: 6,
+      background: checked ? '#f5f3ff' : '#f8fafc',
+      border: `1px solid ${checked ? '#c4b5fd' : '#e2e8f0'}`,
+      color: checked ? '#7c3aed' : '#64748b',
+      fontWeight: checked ? 700 : 500,
+      userSelect: 'none', transition: 'all 0.15s ease',
+    }}>
       <input type="checkbox" checked={!!checked} onChange={e => onChange(e.target.checked)} disabled={disabled}
         style={{ accentColor: '#7c3aed', width: 13, height: 13 }} />
       {label}
@@ -823,28 +821,28 @@ function ClashWarningBanner({ clashes, dressName, onOverride, onDismiss, overrid
   );
 }
 
-const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 3 };
-const cardStyle  = { background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 16, overflow: 'hidden' };
-const cardHdr    = { padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 };
-const cardBody   = { padding: '16px' };
+const labelStyle = { display: 'block', fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 4, letterSpacing: '0.2px' };
+const cardStyle = { background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', marginBottom: 0, overflow: 'visible' };
+const cardHdr = { padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fafbfc', borderTopLeftRadius: 12, borderTopRightRadius: 12 };
+const cardBody = { padding: '16px' };
 
 // ─── Main Booking Form ────────────────────────────────────────────────────────
 export default function NewBookingPage() {
   const router = useRouter();
 
   const [bookingNo, setBookingNo] = useState('...');
-  const [userRole,  setUserRole]  = useState('viewer');
+  const [userRole, setUserRole] = useState('viewer');
 
   // Booking card
-  const [status,       setStatus]       = useState('None');
-  const [cityId,       setCityId]       = useState('');
-  const [bookingDate,  setBookingDate]  = useState(new Date().toISOString().slice(0, 10));
+  const [status, setStatus] = useState('None');
+  const [cityId, setCityId] = useState('');
+  const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
   const [deliveryDate, setDeliveryDate] = useState('');
-  const [returningDate,setReturningDate]= useState('');
-  const [notes,        setNotes]        = useState('');
+  const [returningDate, setReturningDate] = useState('');
+  const [notes, setNotes] = useState('');
 
   // Computed read-only fields
-  const bookingMonth    = bookingDate ? bookingDate.slice(0, 7) : '';
+  const bookingMonth = bookingDate ? bookingDate.slice(0, 7) : '';
   const totalReturnDays = (() => {
     if (!deliveryDate || !returningDate) return '';
     const d = Math.abs(Math.round((new Date(returningDate) - new Date(deliveryDate)) / 86400000));
@@ -878,35 +876,35 @@ export default function NewBookingPage() {
   // Advance Payment (for New Booking)
   const [advanceAmount, setAdvanceAmount] = useState('');
   const [advanceMethod, setAdvanceMethod] = useState('cash');
-  const [advanceDate,   setAdvanceDate]   = useState(new Date().toISOString().slice(0, 10));
-  const [advanceNote,   setAdvanceNote]   = useState('');
+  const [advanceDate, setAdvanceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [advanceNote, setAdvanceNote] = useState('');
 
   // Add Payment Modal (for Existing Booking)
   const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
-  const [newPayAmount,  setNewPayAmount]  = useState('');
-  const [newPayMethod,  setNewPayMethod]  = useState('cash');
-  const [newPayKind,    setNewPayKind]    = useState('rental');
-  const [newPayDate,    setNewPayDate]    = useState(new Date().toISOString().slice(0, 10));
-  const [newPayNote,    setNewPayNote]    = useState('');
+  const [newPayAmount, setNewPayAmount] = useState('');
+  const [newPayMethod, setNewPayMethod] = useState('cash');
+  const [newPayKind, setNewPayKind] = useState('rental');
+  const [newPayDate, setNewPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [newPayNote, setNewPayNote] = useState('');
   const [submittingPayment, setSubmittingPayment] = useState(false);
 
   // Void Payment Modal
   const [voidTargetPayment, setVoidTargetPayment] = useState(null);
-  const [voidReason,        setVoidReason]        = useState('');
-  const [submittingVoid,    setSubmittingVoid]    = useState(false);
+  const [voidReason, setVoidReason] = useState('');
+  const [submittingVoid, setSubmittingVoid] = useState(false);
 
   // Status Close Checklist Modal
-  const [statusCheckModal,  setStatusCheckModal]  = useState(null);
-  const [forceCloseReason,  setForceCloseReason]  = useState('');
+  const [statusCheckModal, setStatusCheckModal] = useState(null);
+  const [forceCloseReason, setForceCloseReason] = useState('');
   const [submittingForceClose, setSubmittingForceClose] = useState(false);
 
   // Save state
-  const [saving,  setSaving]  = useState(false);
-  const [error,   setError]   = useState('');
-  const [saved,   setSaved]   = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
 
   // Phase 6: Clash warning state — map of _key -> { clashes: [], dressName, overridden }
-  const [clashWarnings, setClashWarnings]           = useState({});
+  const [clashWarnings, setClashWarnings] = useState({});
   const [clashOverrideLoading, setClashOverrideLoading] = useState({});
 
   // Phase 8: Receipt modal state
@@ -1029,7 +1027,7 @@ export default function NewBookingPage() {
     : Math.max(0, parseInt(advanceAmount || 0, 10));
 
   const remainingBalance = Math.max(0, grandTotalSafe - totalPaid);
-  const overpaidAmount   = totalPaid > grandTotalSafe ? totalPaid - grandTotalSafe : 0;
+  const overpaidAmount = totalPaid > grandTotalSafe ? totalPaid - grandTotalSafe : 0;
 
   // Item helpers
   function setItem(key, field, val) {
@@ -1082,7 +1080,7 @@ export default function NewBookingPage() {
           // Available — clear any old warning
           setClashWarnings(prev => { const n = { ...prev }; delete n[key]; return n; });
         }
-      }).catch(() => {/* ignore network errors silently */});
+      }).catch(() => {/* ignore network errors silently */ });
     }
   }
 
@@ -1121,7 +1119,7 @@ export default function NewBookingPage() {
   }
 
   const isViewer = userRole === 'viewer';
-  const isOwner  = userRole === 'owner';
+  const isOwner = userRole === 'owner';
 
   // Handle Status change with Closed checklist check
   async function handleStatusSelect(newStatus) {
@@ -1246,7 +1244,7 @@ export default function NewBookingPage() {
         const parsed = JSON.parse(savedDraft);
         return Boolean(parsed && (parsed.customer || parsed.items?.some(it => it.dress_name_snapshot)));
       }
-    } catch {}
+    } catch { }
     return false;
   });
 
@@ -1265,12 +1263,12 @@ export default function NewBookingPage() {
         if (p.items?.length) setItems(p.items);
         if (p.discount) setDiscount(p.discount);
       }
-    } catch {}
+    } catch { }
     setHasDraft(false);
   }
 
   function discardDraft() {
-    try { localStorage.removeItem('ifrah_booking_draft'); } catch {}
+    try { localStorage.removeItem('ifrah_booking_draft'); } catch { }
     setHasDraft(false);
   }
 
@@ -1282,7 +1280,7 @@ export default function NewBookingPage() {
           status, cityId, bookingDate, deliveryDate, returningDate,
           notes, customer, items, discount,
         }));
-      } catch {}
+      } catch { }
     }, 1000);
     return () => clearTimeout(t);
   }, [status, cityId, bookingDate, deliveryDate, returningDate, notes, customer, items, discount, saved, editBookingId]);
@@ -1299,28 +1297,28 @@ export default function NewBookingPage() {
     setSaving(true);
     try {
       const payload = {
-        customer_id:    customer?.id || null,
-        city_id:        cityId || null,
+        customer_id: customer?.id || null,
+        city_id: cityId || null,
         status,
-        booking_date:   bookingDate || null,
-        delivery_date:  deliveryDate || null,
+        booking_date: bookingDate || null,
+        delivery_date: deliveryDate || null,
         returning_date: returningDate || null,
-        notes:          notes || null,
-        discount:       parseInt(discount || 0, 10),
+        notes: notes || null,
+        discount: parseInt(discount || 0, 10),
         items: items
           .filter(it => it.dress_name_snapshot.trim() || it.rate)
           .map(it => ({
-            dress_id:           it.dress_id,
+            dress_id: it.dress_id,
             dress_name_snapshot: it.dress_name_snapshot || 'Unknown',
-            size:               it.size || null,
-            quantity:           parseInt(it.quantity || 1, 10),
-            rate:               parseInt(it.rate || 0, 10),
-            description:        it.description || null,
-            jewellery:          it.jewellery ? 1 : 0,
-            clutch_purse:       it.clutch_purse ? 1 : 0,
-            hand_bag:           it.hand_bag ? 1 : 0,
-            double_dupatta:     it.double_dupatta ? 1 : 0,
-            shoes:              it.shoes ? 1 : 0,
+            size: it.size || null,
+            quantity: parseInt(it.quantity || 1, 10),
+            rate: parseInt(it.rate || 0, 10),
+            description: it.description || null,
+            jewellery: it.jewellery ? 1 : 0,
+            clutch_purse: it.clutch_purse ? 1 : 0,
+            hand_bag: it.hand_bag ? 1 : 0,
+            double_dupatta: it.double_dupatta ? 1 : 0,
+            shoes: it.shoes ? 1 : 0,
           })),
       };
 
@@ -1337,12 +1335,12 @@ export default function NewBookingPage() {
       } else {
         payload.advance_amount = parseInt(advanceAmount || 0, 10);
         payload.advance_method = advanceMethod;
-        payload.advance_date   = advanceDate;
-        payload.advance_note   = advanceNote;
+        payload.advance_date = advanceDate;
+        payload.advance_note = advanceNote;
 
         const res = await window.electronAPI?.bookings.create(payload);
         if (!res?.ok) { setError(res?.message || 'Save failed.'); return; }
-        try { localStorage.removeItem('ifrah_booking_draft'); } catch {}
+        try { localStorage.removeItem('ifrah_booking_draft'); } catch { }
         setSaved(true);
         const newId = res.id;
         setEditBookingId(newId);
@@ -1413,7 +1411,7 @@ export default function NewBookingPage() {
         </div>
       </div>
 
-      <div className="page-body" style={{ maxWidth: 880 }}>
+      <div className="page-body" style={{ maxWidth: '100%', padding: '20px 28px 120px' }}>
         {/* Unsaved draft notification */}
         {hasDraft && (
           <div style={{
@@ -1508,303 +1506,145 @@ export default function NewBookingPage() {
           </div>
         )}
 
-        {/* ── CARD 1: Booking Info ───────────────────────────────────── */}
-        <div style={cardStyle}>
-          <div style={cardHdr}>
-            <Calendar size={16} color="#7c3aed" />
-            <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>Booking Details</span>
-          </div>
-          <div style={cardBody}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-              {/* Status */}
-              <div>
-                <label style={labelStyle}>
-                  Status
-                  <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4, fontWeight: 400 }} title="Closed ke liye delivered, returned aur remaining Rs. 0 hona zaroori hai.">
-                    ⓘ
-                  </span>
-                </label>
-                <select
-                  className="form-input form-select"
-                  value={status}
-                  onChange={e => handleStatusSelect(e.target.value)}
-                  disabled={isViewer}
-                >
-                  {['None','Open','Pending','Closed'].map(s =>
-                    <option key={s} value={s}>{s}</option>
-                  )}
-                </select>
-              </div>
-              {/* City (Learning Combobox) */}
-              <div>
-                <label style={labelStyle}>City</label>
-                <LearningCombobox
-                  tableName="cities"
-                  value={cityId}
-                  onChange={setCityId}
-                  placeholder="City select ya type karein..."
-                  disabled={isViewer}
-                />
-              </div>
-              {/* Booking Month (read-only) */}
-              <div>
-                <label style={labelStyle}>Month <span style={{ color: '#94a3b8', fontWeight: 400 }}>(auto)</span></label>
-                <input className="form-input" value={bookingMonth} readOnly
-                  style={{ background: '#f8fafc', color: '#64748b', cursor: 'not-allowed' }} />
-              </div>
-              {/* Booking date */}
-              <div>
-                <label style={labelStyle}>Booking Date</label>
-                <DateInput value={bookingDate} onChange={setBookingDate} disabled={isViewer} />
-              </div>
-              {/* Delivery date */}
-              <div>
-                <label style={labelStyle}>
-                  Delivery Date
-                  {deliveryWarning && (
-                    <span style={{ color: '#f59e0b', fontSize: 11, marginLeft: 6 }}>
-                      ⚠ Dress add karne se pehle ye bharo
-                    </span>
-                  )}
-                </label>
-                <DateInput id="delivery-date-field" value={deliveryDate} onChange={v => { setDeliveryDate(v); if (v) setDeliveryWarning(false); }} disabled={isViewer} />
-              </div>
-              {/* Returning date */}
-              <div>
-                <label style={labelStyle}>Returning Date</label>
-                <DateInput value={returningDate} onChange={setReturningDate} disabled={isViewer} />
-              </div>
-              {/* Total returning days (read-only) */}
-              <div>
-                <label style={labelStyle}>Total Days <span style={{ color: '#94a3b8', fontWeight: 400 }}>(auto)</span></label>
-                <input className="form-input" value={totalReturnDays !== '' ? `${totalReturnDays} din` : '—'} readOnly
-                  style={{ background: '#f8fafc', color: '#64748b', cursor: 'not-allowed' }} />
-              </div>
-              {/* Notes */}
-              <div style={{ gridColumn: '2 / -1' }}>
-                <label style={labelStyle}>Notes</label>
-                <input className="form-input" value={notes} onChange={e => setNotes(e.target.value)}
-                  placeholder="Koi khaas baat..." disabled={isViewer} />
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* ── 2-COLUMN FULL-WIDTH LAYOUT ── */}
+        <div className="booking-form-grid">
+          {/* ════ LEFT COLUMN: Customer + Dresses (+ Ledger when editing) ════ */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Customer Card */}
+            <CustomerCard
+              customer={customer}
+              onSelectCustomer={handleSelectCustomer}
+              disabled={isViewer}
+            />
 
-        {/* ── CARD 2: Customer (Search + Inline New Customer Creation) ── */}
-        <CustomerCard
-          customer={customer}
-          onSelectCustomer={handleSelectCustomer}
-          disabled={isViewer}
-        />
-
-        {/* ── CARD 3: Dresses ───────────────────────────────────────── */}
-        <div style={cardStyle}>
-          <div style={cardHdr}>
-            <Package size={16} color="#7c3aed" />
-            <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>Dresses</span>
-            <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>{items.length} line{items.length !== 1 ? 's' : ''}</span>
-          </div>
-          <div style={{ padding: '0 16px 16px' }}>
-            {items.map((it, idx) => (
-              <div key={it._key} style={{ borderBottom: idx < items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: 14, paddingTop: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', minWidth: 20 }}>
-                    {String(idx + 1).padStart(2, '0')}
-                  </span>
-                  <div style={{ flex: 1 }}>
-                    <DressPicker
-                      value={it.dress_id}
-                      valueName={it.dress_name_snapshot}
-                      onSelect={(d) => selectDress(it._key, d)}
-                      disabled={isViewer}
-                    />
-                  </div>
-                  {items.length > 1 && !isViewer && (
-                    <button onClick={() => removeItem(it._key)}
-                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ef4444', padding: 4 }}>
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
-
-                {/* Phase 6: Clash Warning Banner */}
-                {clashWarnings[it._key] && (
-                  <div style={{ paddingLeft: 28, paddingRight: 4 }}>
-                    <ClashWarningBanner
-                      clashes={clashWarnings[it._key].clashes}
-                      dressName={clashWarnings[it._key].dressName}
-                      onDismiss={() => dismissClash(it._key)}
-                      onOverride={(reason) => handleClashOverride(it._key, reason)}
-                      overrideLoading={!!clashOverrideLoading[it._key]}
-                    />
-                  </div>
-                )}
-
-                <div style={{ display: 'grid', gridTemplateColumns: '120px 120px 100px 1fr', gap: 10, paddingLeft: 28 }}>
-                  <div>
-                    <label style={labelStyle}>Size</label>
-                    <select className="form-input form-select" style={{ fontSize: 12 }} value={it.size || ''}
-                      onChange={e => setItem(it._key, 'size', e.target.value)} disabled={isViewer}>
-                      <option value="">—</option>
-                      {['XS','S','M','L','XL','XXL','Free Size'].map(s =>
-                        <option key={s} value={s}>{s}</option>
+            {/* Dresses Card */}
+            <div style={cardStyle}>
+              <div style={cardHdr}>
+                <Package size={16} color="#7c3aed" />
+                <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>Dresses</span>
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>{items.length} line{items.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div style={{ padding: '0 16px 16px' }}>
+                {items.map((it, idx) => (
+                  <div key={it._key} style={{ borderBottom: idx < items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: 14, paddingTop: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', minWidth: 20 }}>
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <DressPicker
+                          value={it.dress_id}
+                          valueName={it.dress_name_snapshot}
+                          onSelect={(d) => selectDress(it._key, d)}
+                          disabled={isViewer}
+                        />
+                      </div>
+                      {items.length > 1 && !isViewer && (
+                        <button onClick={() => removeItem(it._key)}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ef4444', padding: 4 }}>
+                          <Trash2 size={14} />
+                        </button>
                       )}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Qty</label>
-                    <input className="form-input" type="number" min={1} value={it.quantity}
-                      onChange={e => setItem(it._key, 'quantity', e.target.value)}
-                      style={{ fontSize: 12 }} disabled={isViewer} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Rate (Rs.)</label>
-                    <input className="form-input" type="number" min={0} value={it.rate}
-                      onChange={e => setItem(it._key, 'rate', e.target.value)}
-                      style={{ fontSize: 12, fontWeight: 700 }} disabled={isViewer} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Line Total</label>
-                    <div style={{ padding: '7px 10px', background: '#f8fafc', borderRadius: 8, fontSize: 13, fontWeight: 800, color: '#0f172a', border: '1px solid #e2e8f0' }}>
-                      Rs. {(parseInt(it.quantity || 1, 10) * parseInt(it.rate || 0, 10)).toLocaleString()}
+                    </div>
+
+                    {/* Phase 6: Clash Warning Banner */}
+                    {clashWarnings[it._key] && (
+                      <div style={{ paddingLeft: 28, paddingRight: 4 }}>
+                        <ClashWarningBanner
+                          clashes={clashWarnings[it._key].clashes}
+                          dressName={clashWarnings[it._key].dressName}
+                          onDismiss={() => dismissClash(it._key)}
+                          onOverride={(reason) => handleClashOverride(it._key, reason)}
+                          overrideLoading={!!clashOverrideLoading[it._key]}
+                        />
+                      </div>
+                    )}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '120px 100px 120px 1fr', gap: 10, paddingLeft: 28 }}>
+                      <div>
+                        <label style={labelStyle}>Size</label>
+                        <select className="form-input form-select" style={{ fontSize: 12 }} value={it.size || ''}
+                          onChange={e => setItem(it._key, 'size', e.target.value)} disabled={isViewer}>
+                          <option value="">—</option>
+                          {['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Free Size'].map(s =>
+                            <option key={s} value={s}>{s}</option>
+                          )}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Qty</label>
+                        <input className="form-input" type="number" min={1} value={it.quantity}
+                          onChange={e => setItem(it._key, 'quantity', e.target.value)}
+                          style={{ fontSize: 12 }} disabled={isViewer} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Rate (Rs.)</label>
+                        <input className="form-input" type="number" min={0} value={it.rate}
+                          onChange={e => setItem(it._key, 'rate', e.target.value)}
+                          style={{ fontSize: 12, fontWeight: 700 }} disabled={isViewer} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Line Total</label>
+                        <div style={{ padding: '7px 10px', background: '#f8fafc', borderRadius: 8, fontSize: 13, fontWeight: 800, color: '#0f172a', border: '1px solid #e2e8f0' }}>
+                          Rs. {(parseInt(it.quantity || 1, 10) * parseInt(it.rate || 0, 10)).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <div style={{ paddingLeft: 28, marginTop: 8 }}>
+                      <input className="form-input" value={it.description} onChange={e => setItem(it._key, 'description', e.target.value)}
+                        placeholder="Condition note / description (optional)..."
+                        style={{ fontSize: 12, width: '100%' }} disabled={isViewer} />
+                    </div>
+
+                    {/* Accessories */}
+                    <div style={{ paddingLeft: 28, marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <AccessCheck label="Jewellery" checked={it.jewellery} onChange={v => setItem(it._key, 'jewellery', v)} disabled={isViewer} />
+                      <AccessCheck label="Clutch Purse" checked={it.clutch_purse} onChange={v => setItem(it._key, 'clutch_purse', v)} disabled={isViewer} />
+                      <AccessCheck label="Hand Bag" checked={it.hand_bag} onChange={v => setItem(it._key, 'hand_bag', v)} disabled={isViewer} />
+                      <AccessCheck label="Double Dupatta" checked={it.double_dupatta} onChange={v => setItem(it._key, 'double_dupatta', v)} disabled={isViewer} />
+                      <AccessCheck label="Shoes" checked={it.shoes} onChange={v => setItem(it._key, 'shoes', v)} disabled={isViewer} />
                     </div>
                   </div>
-                </div>
+                ))}
 
-                {/* Description */}
-                <div style={{ paddingLeft: 28, marginTop: 8 }}>
-                  <input className="form-input" value={it.description} onChange={e => setItem(it._key, 'description', e.target.value)}
-                    placeholder="Condition note / description (optional)..."
-                    style={{ fontSize: 12, width: '100%' }} disabled={isViewer} />
-                </div>
-
-                {/* Accessories */}
-                <div style={{ paddingLeft: 28, marginTop: 8, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                  <AccessCheck label="Jewellery"      checked={it.jewellery}      onChange={v => setItem(it._key, 'jewellery', v)}      disabled={isViewer} />
-                  <AccessCheck label="Clutch Purse"   checked={it.clutch_purse}   onChange={v => setItem(it._key, 'clutch_purse', v)}   disabled={isViewer} />
-                  <AccessCheck label="Hand Bag"       checked={it.hand_bag}       onChange={v => setItem(it._key, 'hand_bag', v)}       disabled={isViewer} />
-                  <AccessCheck label="Double Dupatta" checked={it.double_dupatta} onChange={v => setItem(it._key, 'double_dupatta', v)} disabled={isViewer} />
-                  <AccessCheck label="Shoes"          checked={it.shoes}          onChange={v => setItem(it._key, 'shoes', v)}          disabled={isViewer} />
-                </div>
-              </div>
-            ))}
-
-            {!isViewer && (
-              <div style={{ paddingTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
-                <button className="btn btn-secondary" onClick={addItem}>
-                  <Plus size={13} /> Aur Dress Add Karein
-                </button>
-                {deliveryWarning && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#f59e0b', fontSize: 12.5, fontWeight: 600 }}>
-                    <AlertCircle size={13} />
-                    Pehle Delivery Date bharo, phir dress add karein
-                    <button className="btn btn-secondary btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
-                      onClick={() => { document.getElementById('delivery-date-field')?.focus(); }}>
-                      Jump to date
+                {!isViewer && (
+                  <div style={{ paddingTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <button className="btn btn-secondary" onClick={addItem}>
+                      <Plus size={13} /> Aur Dress Add Karein
                     </button>
+                    {deliveryWarning && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#f59e0b', fontSize: 12.5, fontWeight: 600 }}>
+                        <AlertCircle size={13} />
+                        Pehle Delivery Date bharo, phir dress add karein
+                        <button className="btn btn-secondary btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
+                          onClick={() => { document.getElementById('delivery-date-field')?.focus(); }}>
+                          Jump to date
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* Discount row */}
-            <div style={{ marginTop: 14, borderTop: '1px solid #f1f5f9', paddingTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: '#64748b' }}>Discount (Rs.)</label>
-              <input className="form-input" type="number" min={0} value={discount}
-                onChange={e => setDiscount(e.target.value)}
-                style={{ width: 120, textAlign: 'right', fontWeight: 700 }} disabled={isViewer || userRole === 'cashier'} />
+                {/* Discount row */}
+                <div style={{ marginTop: 14, borderTop: '1px solid #f1f5f9', paddingTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: '#64748b' }}>Discount (Rs.)</label>
+                  <input className="form-input" type="number" min={0} value={discount}
+                    onChange={e => setDiscount(e.target.value)}
+                    style={{ width: 120, textAlign: 'right', fontWeight: 700 }} disabled={isViewer || userRole === 'cashier'} />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* ── CARD 4: Payments & Hisab Kitab ────────────────────────── */}
-        <div style={cardStyle}>
-          <div style={cardHdr}>
-            <CreditCard size={16} color="#7c3aed" />
-            <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>
-              Payments &amp; Hisab Kitab
-            </span>
-            <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700 }}>
-              {remainingBalance === 0 && grandTotalSafe > 0 ? (
-                <span style={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <CheckCircle size={13} /> Fully Paid
-                </span>
-              ) : remainingBalance > 0 ? (
-                <span style={{ color: '#d97706' }}>
-                  Remaining: Rs. {remainingBalance.toLocaleString()}
-                </span>
-              ) : (
-                <span style={{ color: '#64748b' }}>Rs. 0</span>
-              )}
-            </span>
-          </div>
-
-          <div style={{ padding: '16px' }}>
-            {!editBookingId ? (
-              /* New Booking: Advance Payment Form */
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 10 }}>
-                  Advance Payment (optional)
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '150px 150px 150px 1fr', gap: 12 }}>
-                  <div>
-                    <label style={labelStyle}>Advance Amount (Rs.)</label>
-                    <input
-                      className="form-input"
-                      type="number"
-                      min={0}
-                      value={advanceAmount}
-                      onChange={e => setAdvanceAmount(e.target.value)}
-                      placeholder="0"
-                      style={{ fontWeight: 700 }}
-                      disabled={isViewer}
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Payment Method</label>
-                    <select
-                      className="form-input form-select"
-                      value={advanceMethod}
-                      onChange={e => setAdvanceMethod(e.target.value)}
-                      disabled={isViewer}
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="bank">Bank</option>
-                      <option value="wallet">Wallet</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Payment Date</label>
-                    <DateInput
-                      value={advanceDate}
-                      onChange={setAdvanceDate}
-                      disabled={isViewer}
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Note / Details</label>
-                    <input
-                      className="form-input"
-                      value={advanceNote}
-                      onChange={e => setAdvanceNote(e.target.value)}
-                      placeholder="e.g. Advance cash received"
-                      disabled={isViewer}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
-                  💡 Pehli payment Advance ke tor par darj hogi aur booking bante hi auto deduct ho jayegi.
-                </div>
-              </div>
-            ) : (
-              /* Existing Booking: Payment History Ledger Table + Add Payment */
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+            {/* Existing Payments Ledger (when editing) */}
+            {editBookingId && (
+              <div style={cardStyle}>
+                <div style={cardHdr}>
+                  <CreditCard size={16} color="#7c3aed" />
+                  <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>
                     Payment History ({existingPayments.length} records)
-                  </div>
+                  </span>
                   {!isViewer && (
                     <button
                       className="btn btn-primary btn-sm"
@@ -1812,96 +1652,342 @@ export default function NewBookingPage() {
                         setNewPayAmount(remainingBalance > 0 ? String(remainingBalance) : '');
                         setShowAddPaymentModal(true);
                       }}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                      style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}
                     >
                       <Plus size={12} /> Nayi Payment Record Karein
                     </button>
                   )}
                 </div>
-
-                {existingPayments.length === 0 ? (
-                  <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13, background: '#f8fafc', borderRadius: 8 }}>
-                    Abhi koi payment darj nahi hui. Nayi payment add karne ke liye upar button dabayein.
-                  </div>
-                ) : (
-                  <table className="data-table" style={{ fontSize: 12.5 }}>
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Date</th>
-                        <th>Method</th>
-                        <th>Kind</th>
-                        <th>Received By</th>
-                        <th>Note</th>
-                        <th style={{ textAlign: 'right' }}>Amount</th>
-                        <th style={{ textAlign: 'center' }}>Status</th>
-                        {isOwner && <th>Action</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {existingPayments.map((p, idx) => {
-                        const isVoid = p.is_void === 1;
-                        return (
-                          <tr key={p.id || idx} style={{ opacity: isVoid ? 0.6 : 1, background: isVoid ? '#fef2f2' : undefined }}>
-                            <td style={{ fontFamily: 'monospace', color: '#94a3b8' }}>#{idx + 1}</td>
-                            <td>{p.paid_on}</td>
-                            <td>
-                              <span style={{
-                                padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700,
-                                background: p.payment_method === 'cash' ? '#dcfce7' : p.payment_method === 'bank' ? '#dbeafe' : '#fef3c7',
-                                color: p.payment_method === 'cash' ? '#16a34a' : p.payment_method === 'bank' ? '#1d4ed8' : '#d97706',
-                                textTransform: 'capitalize',
-                              }}>
-                                {p.payment_method}
-                              </span>
-                            </td>
-                            <td>
-                              <span style={{ fontSize: 11, textTransform: 'uppercase', fontWeight: 700, color: p.kind === 'deposit' ? '#7c3aed' : '#475569' }}>
-                                {p.kind}
-                              </span>
-                            </td>
-                            <td>{p.received_by_name || 'Staff'}</td>
-                            <td style={{ color: '#64748b' }}>{p.note || '—'}</td>
-                            <td style={{ textAlign: 'right', fontWeight: 800, color: isVoid ? '#94a3b8' : '#10b981', textDecoration: isVoid ? 'line-through' : 'none' }}>
-                              Rs. {Number(p.amount || 0).toLocaleString()}
-                            </td>
-                            <td style={{ textAlign: 'center' }}>
-                              {isVoid ? (
-                                <span style={{ background: '#fee2e2', color: '#dc2626', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 800 }} title={p.void_reason}>
-                                  Voided
-                                </span>
-                              ) : (
-                                <span style={{ background: '#dcfce7', color: '#16a34a', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 800 }}>
-                                  Active ✓
-                                </span>
-                              )}
-                            </td>
-                            {isOwner && (
-                              <td>
-                                {!isVoid && (
-                                  <button
-                                    className="btn btn-secondary btn-sm"
-                                    style={{ fontSize: 10.5, padding: '2px 6px', color: '#dc2626' }}
-                                    onClick={() => { setVoidTargetPayment(p); setVoidReason(''); }}
-                                  >
-                                    <Ban size={10} /> Void
-                                  </button>
-                                )}
-                              </td>
-                            )}
+                <div style={cardBody}>
+                  {existingPayments.length === 0 ? (
+                    <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13, background: '#f8fafc', borderRadius: 8 }}>
+                      Abhi koi payment darj nahi hui. Nayi payment add karne ke liye upar button dabayein.
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="data-table" style={{ fontSize: 12.5, width: '100%' }}>
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Date</th>
+                            <th>Method</th>
+                            <th>Kind</th>
+                            <th>Received By</th>
+                            <th>Note</th>
+                            <th style={{ textAlign: 'right' }}>Amount</th>
+                            <th style={{ textAlign: 'center' }}>Status</th>
+                            {isOwner && <th>Action</th>}
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
+                        </thead>
+                        <tbody>
+                          {existingPayments.map((p, idx) => {
+                            const isVoid = p.is_void === 1;
+                            return (
+                              <tr key={p.id || idx} style={{ opacity: isVoid ? 0.6 : 1, background: isVoid ? '#fef2f2' : undefined }}>
+                                <td style={{ fontFamily: 'monospace', color: '#94a3b8' }}>#{idx + 1}</td>
+                                <td>{p.paid_on}</td>
+                                <td>
+                                  <span style={{
+                                    padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                                    background: p.payment_method === 'cash' ? '#dcfce7' : p.payment_method === 'bank' ? '#dbeafe' : '#fef3c7',
+                                    color: p.payment_method === 'cash' ? '#16a34a' : p.payment_method === 'bank' ? '#1d4ed8' : '#d97706',
+                                    textTransform: 'capitalize',
+                                  }}>
+                                    {p.payment_method}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span style={{ fontSize: 11, textTransform: 'uppercase', fontWeight: 700, color: p.kind === 'deposit' ? '#7c3aed' : '#475569' }}>
+                                    {p.kind}
+                                  </span>
+                                </td>
+                                <td>{p.received_by_name || 'Staff'}</td>
+                                <td style={{ color: '#64748b' }}>{p.note || '—'}</td>
+                                <td style={{ textAlign: 'right', fontWeight: 800, color: isVoid ? '#94a3b8' : '#10b981', textDecoration: isVoid ? 'line-through' : 'none' }}>
+                                  Rs. {Number(p.amount || 0).toLocaleString()}
+                                </td>
+                                <td style={{ textAlign: 'center' }}>
+                                  {isVoid ? (
+                                    <span style={{ background: '#fee2e2', color: '#dc2626', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 800 }} title={p.void_reason}>
+                                      Voided
+                                    </span>
+                                  ) : (
+                                    <span style={{ background: '#dcfce7', color: '#16a34a', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 800 }}>
+                                      Active ✓
+                                    </span>
+                                  )}
+                                </td>
+                                {isOwner && (
+                                  <td>
+                                    {!isVoid && (
+                                      <button
+                                        className="btn btn-secondary btn-sm"
+                                        style={{ fontSize: 10.5, padding: '2px 6px', color: '#dc2626' }}
+                                        onClick={() => { setVoidTargetPayment(p); setVoidReason(''); }}
+                                      >
+                                        <Ban size={10} /> Void
+                                      </button>
+                                    )}
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
+          </div>
+
+          {/* ════ RIGHT COLUMN: Booking Details & Advance Payment / Hisab ════ */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Booking Details Card */}
+            <div style={cardStyle}>
+              <div style={cardHdr}>
+                <Calendar size={16} color="#7c3aed" />
+                <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>Booking Details</span>
+                <span style={{ marginLeft: 'auto', fontSize: 11.5, background: '#f5f3ff', color: '#7c3aed', padding: '2px 8px', borderRadius: 12, fontWeight: 700 }}>
+                  #{bookingNo}
+                </span>
+              </div>
+              <div style={cardBody}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  {/* Status */}
+                  <div>
+                    <label style={labelStyle}>
+                      Status
+                      <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4, fontWeight: 400 }} title="Closed ke liye delivered, returned aur remaining Rs. 0 hona zaroori hai.">
+                        ⓘ
+                      </span>
+                    </label>
+                    <select
+                      className="form-input form-select"
+                      value={status}
+                      onChange={e => handleStatusSelect(e.target.value)}
+                      disabled={isViewer}
+                    >
+                      {['None', 'Open', 'Pending', 'Closed'].map(s =>
+                        <option key={s} value={s}>{s}</option>
+                      )}
+                    </select>
+                  </div>
+
+                  {/* City (Learning Combobox) */}
+                  <div>
+                    <label style={labelStyle}>City</label>
+                    <LearningCombobox
+                      tableName="cities"
+                      value={cityId}
+                      onChange={setCityId}
+                      placeholder="City select ya type..."
+                      disabled={isViewer}
+                    />
+                  </div>
+
+                  {/* Delivery date */}
+                  <div>
+                    <label style={{ ...labelStyle, color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>Delivery Date</span>
+                      {deliveryWarning && (
+                        <span style={{ color: '#ef4444', fontSize: 10.5 }}>⚠ Zaroori</span>
+                      )}
+                    </label>
+                    <DateInput
+                      id="delivery-date-field"
+                      value={deliveryDate}
+                      onChange={v => { setDeliveryDate(v); if (v) setDeliveryWarning(false); }}
+                      disabled={isViewer}
+                      style={{
+                        borderColor: deliveryWarning ? '#ef4444' : '#ddd6fe',
+                        background: deliveryWarning ? '#fef2f2' : 'white',
+                      }}
+                    />
+                  </div>
+
+                  {/* Returning date */}
+                  <div>
+                    <label style={{ ...labelStyle, color: '#0284c7' }}>Returning Date</label>
+                    <DateInput
+                      value={returningDate}
+                      min={deliveryDate || undefined}
+                      onChange={setReturningDate}
+                      disabled={isViewer}
+                      style={{ borderColor: '#bae6fd' }}
+                    />
+                  </div>
+
+                  {/* Booking date */}
+                  <div>
+                    <label style={labelStyle}>Booking Date</label>
+                    <DateInput
+                      value={bookingDate}
+                      onChange={setBookingDate}
+                      disabled={isViewer}
+                    />
+                  </div>
+
+                  {/* Total returning days */}
+                  <div>
+                    <label style={labelStyle}>Rental Duration <span style={{ color: '#94a3b8', fontWeight: 400 }}>(auto)</span></label>
+                    <div style={{
+                      padding: '7px 10px',
+                      background: totalReturnDays !== '' ? '#f5f3ff' : '#f8fafc',
+                      border: `1px solid ${totalReturnDays !== '' ? '#ddd6fe' : '#e2e8f0'}`,
+                      borderRadius: 8, fontSize: 13, fontWeight: 700,
+                      color: totalReturnDays !== '' ? '#7c3aed' : '#64748b',
+                    }}>
+                      {totalReturnDays !== '' ? `${totalReturnDays} Din Rental` : '—'}
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={labelStyle}>Notes / Special Request</label>
+                    <input className="form-input" value={notes} onChange={e => setNotes(e.target.value)}
+                      placeholder="Koi khaas baat ya request..." disabled={isViewer} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Advance Payment (for New Booking) */}
+            {!editBookingId && (
+              <div style={cardStyle}>
+                <div style={cardHdr}>
+                  <CreditCard size={16} color="#7c3aed" />
+                  <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>
+                    Advance Payment
+                  </span>
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: '#64748b' }}>Optional</span>
+                </div>
+                <div style={cardBody}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={labelStyle}>Advance Amount (Rs.)</label>
+                      <input
+                        className="form-input"
+                        type="number"
+                        min={0}
+                        value={advanceAmount}
+                        onChange={e => setAdvanceAmount(e.target.value)}
+                        placeholder="0"
+                        style={{ fontWeight: 700 }}
+                        disabled={isViewer}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Payment Method</label>
+                      <select
+                        className="form-input form-select"
+                        value={advanceMethod}
+                        onChange={e => setAdvanceMethod(e.target.value)}
+                        disabled={isViewer}
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="bank">Bank</option>
+                        <option value="wallet">Wallet</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Payment Date</label>
+                      <DateInput
+                        value={advanceDate}
+                        onChange={setAdvanceDate}
+                        disabled={isViewer}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Note / Details</label>
+                      <input
+                        className="form-input"
+                        value={advanceNote}
+                        onChange={e => setAdvanceNote(e.target.value)}
+                        placeholder="e.g. Advance cash received"
+                        disabled={isViewer}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 11.5, color: '#64748b' }}>
+                    💡 Pehli payment Advance ke tor par darj hogi aur booking bante hi auto deduct ho jayegi.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Live Financial Breakdown Card */}
+            <div style={cardStyle}>
+              <div style={cardHdr}>
+                <CreditCard size={16} color="#10b981" />
+                <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>
+                  Hisab Kitab Summary
+                </span>
+                <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700 }}>
+                  {remainingBalance === 0 && grandTotalSafe > 0 ? (
+                    <span style={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <CheckCircle size={13} /> Fully Paid
+                    </span>
+                  ) : remainingBalance > 0 ? (
+                    <span style={{ color: '#d97706' }}>
+                      Remaining: Rs. {remainingBalance.toLocaleString()}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#64748b' }}>Rs. 0</span>
+                  )}
+                </span>
+              </div>
+              <div style={cardBody}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9, fontSize: 12.5 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+                    <span>Dresses Subtotal ({items.length} line{items.length !== 1 ? 's' : ''})</span>
+                    <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                      Rs. {items.reduce((sum, it) => sum + (parseInt(it.quantity || 1, 10) * parseInt(it.rate || 0, 10)), 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  {Number(discount || 0) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16a34a' }}>
+                      <span>Discount</span>
+                      <span style={{ fontWeight: 700 }}>- Rs. {Number(discount).toLocaleString()}</span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, color: '#0f172a', paddingTop: 6, borderTop: '1px dashed #e2e8f0', fontSize: 13.5 }}>
+                    <span>Grand Total</span>
+                    <span>Rs. {grandTotalSafe.toLocaleString()}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#7c3aed', fontSize: 12.5 }}>
+                    <span>{editBookingId ? 'Total Paid' : 'Advance Paid'}</span>
+                    <span style={{ fontWeight: 700 }}>
+                      Rs. {totalPaid.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '10px 12px', borderRadius: 8, marginTop: 4,
+                    background: remainingBalance === 0 && grandTotalSafe > 0 ? '#f0fdf4' : remainingBalance > 0 ? '#fff7ed' : '#f8fafc',
+                    border: `1px solid ${remainingBalance === 0 && grandTotalSafe > 0 ? '#bbf7d0' : remainingBalance > 0 ? '#fed7aa' : '#e2e8f0'}`,
+                  }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: remainingBalance === 0 && grandTotalSafe > 0 ? '#16a34a' : remainingBalance > 0 ? '#c2410c' : '#475569' }}>
+                      Remaining Balance:
+                    </span>
+                    <span style={{ fontSize: 16, fontWeight: 900, color: remainingBalance === 0 && grandTotalSafe > 0 ? '#16a34a' : remainingBalance > 0 ? '#ea580c' : '#0f172a' }}>
+                      Rs. {remainingBalance.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         {error && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 14px', color: '#dc2626', fontSize: 13, marginBottom: 12 }}>
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 14px', color: '#dc2626', fontSize: 13, marginTop: 16 }}>
             {error}
           </div>
         )}
@@ -1909,9 +1995,9 @@ export default function NewBookingPage() {
 
       {/* ── STICKY BOTTOM BAR ──────────────────────────────────────── */}
       <div style={{
-        position: 'fixed', bottom: 0, left: 220, right: 0,
+        position: 'fixed', bottom: 0, left: 256, right: 0,
         background: 'white', borderTop: '2px solid #e2e8f0',
-        padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 20,
+        padding: '12px 28px', display: 'flex', alignItems: 'center', gap: 20,
         boxShadow: '0 -4px 20px rgba(0,0,0,0.08)', zIndex: 50,
       }}>
         {/* Totals */}

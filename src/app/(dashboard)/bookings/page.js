@@ -10,10 +10,10 @@ import ReceiptModal from '@/components/ReceiptModal';
 
 
 const STATUS_CHIP = {
-  None:    { bg: '#f1f5f9', color: '#64748b', label: 'None'    },
-  Open:    { bg: '#dbeafe', color: '#1d4ed8', label: 'Open'    },
+  None: { bg: '#f1f5f9', color: '#64748b', label: 'None' },
+  Open: { bg: '#dbeafe', color: '#1d4ed8', label: 'Open' },
   Pending: { bg: '#fef3c7', color: '#d97706', label: 'Pending' },
-  Closed:  { bg: '#dcfce7', color: '#16a34a', label: 'Closed'  },
+  Closed: { bg: '#dcfce7', color: '#16a34a', label: 'Closed' },
 };
 
 function StatusChip({ status }) {
@@ -27,9 +27,9 @@ function StatusChip({ status }) {
 
 export default function BookingsPage() {
   const [bookings, setBookings] = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [search,   setSearch]   = useState('');
-  const [status,   setStatus]   = useState('');
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
   const [deleting, setDeleting] = useState(null);
   const [userRole, setUserRole] = useState('viewer');
   const [printBookingId, setPrintBookingId] = useState(null);
@@ -60,11 +60,11 @@ export default function BookingsPage() {
     setDeleting(null);
   }
 
-  const isOwner   = userRole === 'owner';
-  const isViewer  = userRole === 'viewer';
+  const isOwner = userRole === 'owner';
+  const isViewer = userRole === 'viewer';
 
-  const totalGrand   = bookings.reduce((s, b) => s + (b.grand_total || 0), 0);
-  const totalRemain  = bookings.reduce((s, b) => s + (b.remaining  || 0), 0);
+  const totalGrand = bookings.reduce((s, b) => s + (b.grand_total || 0), 0);
+  const totalRemain = bookings.reduce((s, b) => s + (b.remaining || 0), 0);
 
   return (
     <div>
@@ -216,7 +216,7 @@ export default function BookingsPage() {
                         {isOwner && (
                           <button className="btn btn-secondary btn-sm" style={{ color: '#ef4444' }}
                             onClick={() => handleDelete(b)} disabled={deleting === b.id}>
-                            {deleting === b.id ? '...' : <><Trash2 size={11} /> Delete</>}
+                            {deleting === b.id ? '...' : <><Trash2 size={11} /> </>}
                           </button>
                         )}
                       </div>

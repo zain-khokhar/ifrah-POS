@@ -63,12 +63,16 @@ export default function Sidebar() {
       <div className="sidebar-logo">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-            background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(124,58,237,0.3)',
+            width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+            overflow: 'hidden',
+            border: '1.5px solid #f59e0b',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
           }}>
-            <Sparkles size={18} color="#ffffff" />
+            <img
+              src="/logo.jpeg"
+              alt="Ifrah Collection"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
           </div>
           <div>
             <div style={{ fontSize: 14.5, fontWeight: 800, color: '#f59e0b', letterSpacing: '0.2px' }}>

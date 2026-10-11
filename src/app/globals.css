@@ -507,3 +507,37 @@ body {
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
+
+/* ─── Booking Form Responsive 2-Column Grid ────────────────────── */
+.booking-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.32fr) minmax(370px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1120px) {
+  .booking-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Date Picker Inputs ───────────────────────────────────────── */
+input[type="date"].form-input {
+  cursor: pointer;
+  position: relative;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  filter: invert(0.3) sepia(1) saturate(5) hue-rotate(245deg);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+

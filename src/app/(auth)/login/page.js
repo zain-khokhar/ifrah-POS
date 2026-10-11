@@ -265,16 +265,20 @@ export default function LoginPage() {
         ))}
 
         <div style={{ textAlign: 'center', position: 'relative', zIndex: 1, width: '100%', maxWidth: 360 }}>
-          {/* Logo */}
+          {/* Logo Monogram */}
           <div style={{
-            width: 88, height: 88,
-            background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
-            borderRadius: 22,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 28px',
-            boxShadow: '0 20px 48px rgba(124,58,237,0.4)',
+            width: 104, height: 104,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            margin: '0 auto 24px',
+            boxShadow: '0 16px 40px rgba(0,0,0,0.4)',
+            border: '2.5px solid #f59e0b',
           }}>
-            <Sparkles size={42} color="#ffffff" />
+            <img
+              src="/logo.jpeg"
+              alt="Ifrah Collection"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
           </div>
 
           <h1 style={{ fontSize: 30, fontWeight: 800, color: '#f59e0b', margin: '0 0 8px', letterSpacing: '-0.5px' }}>
@@ -320,10 +324,28 @@ export default function LoginPage() {
       {/* ── Right Panel — Login / Setup Form ──────────────────────── */}
       <div className="login-right">
         <div style={{ width: '100%', maxWidth: 420 }}>
-          <h2 style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', margin: '0 0 4px', letterSpacing: '-0.4px' }}>
+          {/* Logo Monogram */}
+          <div style={{ textAlign: 'center', marginBottom: 18 }}>
+            <img
+              src="/logo.jpeg"
+              alt="Ifrah Collection Monogram"
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                margin: '0 auto 12px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
+                border: '2.5px solid #d97706',
+                display: 'block',
+              }}
+            />
+          </div>
+
+          <h2 style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', margin: '0 0 4px', letterSpacing: '-0.4px', textAlign: 'center' }}>
             {needsSetup ? 'Initial Owner Setup' : 'Welcome Back'}
           </h2>
-          <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 26px' }}>
+          <p style={{ fontSize: 13.5, color: '#64748b', margin: '0 0 24px', textAlign: 'center' }}>
             {needsSetup
               ? 'Pehli martaba Admin / Owner account banayein aur recovery key hasil karein.'
               : 'Apna username aur password darj karke POS login karein.'}
