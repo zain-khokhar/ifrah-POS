@@ -6,6 +6,7 @@ import {
   CreditCard, BarChart2, Key, Mail, Phone, CheckCircle, Copy, HelpCircle,
   ShieldCheck, X, ArrowLeft
 } from 'lucide-react';
+import ActivationModal from '@/components/licensing/ActivationModal';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,9 +39,15 @@ export default function LoginPage() {
   const [recoveryPhoneOrEmail, setRecoveryPhoneOrEmail] = useState('');
   const [recoveryMsg, setRecoveryMsg]             = useState({ type: '', text: '' });
   const [recoveryLoading, setRecoveryLoading]     = useState(false);
+  const [showActivation, setShowActivation]       = useState(false);
 
   useEffect(() => {
-    window.electronAPI?.auth.needsSetup().then(result => setNeedsSetup(result.needsSetup));
+    window.electronAPI?.auth.needsSetup().then(result => setNeedsSetup(result?.needsSetup));
+    window.electronAPI?.license?.check().then(lic => {
+      if (lic && !lic.licensed) {
+        setShowActivation(true);
+      }
+    }).catch(() => {});
   }, []);
 
   const handleLogin = async (e) => {
@@ -871,6 +878,9 @@ export default function LoginPage() {
           </div>
         </div>
       )}
+
+      {/* ── Security License Gate Modal ── */}
+      <ActivationModal isOpen={showActivation} onActivated={() => setShowActivation(false)} />
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

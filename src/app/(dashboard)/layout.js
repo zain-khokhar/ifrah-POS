@@ -13,6 +13,11 @@ export default function DashboardLayout({ children }) {
   useEffect(() => {
     let active = true;
     const checkSession = async () => {
+      const licResult = await window.electronAPI?.license?.check();
+      if (active && licResult && !licResult.licensed) {
+        router.replace('/login');
+        return;
+      }
       const result = await window.electronAPI?.auth.session();
       if (active && !result?.ok) router.replace('/login');
     };
