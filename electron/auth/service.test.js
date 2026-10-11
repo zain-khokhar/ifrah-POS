@@ -96,5 +96,96 @@ test('first-run owner setup creates an audited owner account', async () => {
   assert.equal(owner.role, 'owner');
   assert.match(owner.password_hash, /^scrypt\$/);
   assert.deepEqual(audit, { action: 'user.create', table_name: 'users', record_id: result.lastInsertRowid, user_id: null });
+  assert.match(result.recoveryKey, /^IFRAH-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+/);
+  db.close();
+});
+
+test('requestPasswordReset and resetPasswordWithCode flow works', async () => {
+  const db = createDb();
+  const auth = createAuthService(db, { sleep: async () => {} });
+
+  await auth.setupOwner({
+    username: 'zain',
+    password: 'old-password',
+    fullName: 'Zain Khokhar',
+    email: 'zain@example.com',
+  });
+
+  // 1. Request reset
+  const reqRes = await auth.requestPasswordReset({ identifier: 'zain@example.com' });
+  assert.equal(reqRes.ok, true);
+  assert.match(reqRes.code, /^\d{6}$/);
+
+  // 2. Reset with code
+  const resetRes = await auth.resetPasswordWithCode({
+    identifier: 'zain',
+    code: reqRes.code,
+    newPassword: 'new-secure-password',
+  });
+  assert.equal(resetRes.ok, true);
+
+  // 3. Authenticate with new password
+  const loginRes = await auth.authenticate('zain', 'new-secure-password');
+  assert.equal(loginRes.ok, true);
+
+  // 4. Old password must fail
+  const oldLoginRes = await auth.authenticate('zain', 'old-password');
+  assert.equal(oldLoginRes.ok, false);
+
+  db.close();
+});
+
+test('resetPasswordWithRecoveryKey enables offline emergency password reset', async () => {
+  const db = createDb();
+  const auth = createAuthService(db, { sleep: async () => {} });
+
+  const ownerRes = await auth.setupOwner({
+    username: 'zain',
+    password: 'initial-password',
+    fullName: 'Zain',
+    email: 'zain@boutique.com',
+  });
+
+  const recoveryKey = ownerRes.recoveryKey;
+  assert.ok(recoveryKey);
+
+  // Reset with recovery key
+  const resetRes = await auth.resetPasswordWithRecoveryKey({
+    username: 'zain',
+    recoveryKey,
+    newPassword: 'emergency-recovered-password',
+  });
+  assert.equal(resetRes.ok, true);
+
+  // Verify new password works
+  const loginRes = await auth.authenticate('zain', 'emergency-recovered-password');
+  assert.equal(loginRes.ok, true);
+
+  db.close();
+});
+
+test('recoverUsername returns username for registered email or phone', async () => {
+  const db = createDb();
+  const auth = createAuthService(db, { sleep: async () => {} });
+
+  await auth.setupOwner({
+    username: 'zainkhokhar',
+    password: 'password123',
+    fullName: 'Zain Khokhar',
+    email: 'zain@boutique.com',
+    phone: '03001234567',
+  });
+
+  const resEmail = auth.recoverUsername({ emailOrPhone: 'zain@boutique.com' });
+  assert.equal(resEmail.ok, true);
+  assert.equal(resEmail.username, 'zainkhokhar');
+
+  const resPhone = auth.recoverUsername({ emailOrPhone: '03001234567' });
+  assert.equal(resPhone.ok, true);
+  assert.equal(resPhone.username, 'zainkhokhar');
+
+  const resFail = auth.recoverUsername({ emailOrPhone: 'unknown@example.com' });
+  assert.equal(resFail.ok, false);
+
   db.close();
 });

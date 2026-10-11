@@ -26,10 +26,19 @@ function createBookingsService(db) {
 
   // ─── Next booking number ──────────────────────────────────────────────────
   function nextBookingNo() {
+    let blockStart = 412;
+    try {
+      const stateRow = db.prepare(`SELECT value FROM sync_state WHERE key = 'booking_number_start'`).get();
+      if (stateRow && stateRow.value) {
+        const parsed = parseInt(stateRow.value, 10);
+        if (!isNaN(parsed) && parsed > 0) blockStart = parsed;
+      }
+    } catch {}
+
     const row = db.prepare(
-      `SELECT MAX(booking_no) AS m FROM bookings WHERE deleted_at IS NULL`
-    ).get();
-    return (row?.m ?? 411) + 1;   // 411 = last Access import; first new = 412
+      `SELECT MAX(booking_no) AS m FROM bookings WHERE deleted_at IS NULL AND booking_no >= ?`
+    ).get(blockStart);
+    return row?.m ? (row.m + 1) : blockStart;
   }
 
   // ─── LIST ─────────────────────────────────────────────────────────────────
@@ -271,13 +280,43 @@ function createBookingsService(db) {
         );
       }
 
+      // Phase 13: Enqueue booking and items to sync_outbox
+      try {
+        const bRow = db.prepare(`SELECT * FROM bookings WHERE id = ?`).get(bookingId);
+        if (bRow) {
+          db.prepare(`
+            INSERT INTO sync_outbox (table_name, operation, record_sync_id, payload, status)
+            VALUES ('bookings', 'INSERT', ?, ?, 'pending')
+          `).run(bRow.sync_id, JSON.stringify(bRow));
+        }
+
+        const itemRows = db.prepare(`SELECT * FROM booking_items WHERE booking_id = ?`).all(bookingId);
+        const insOutbox = db.prepare(`
+          INSERT INTO sync_outbox (table_name, operation, record_sync_id, payload, status)
+          VALUES ('booking_items', 'INSERT', ?, ?, 'pending')
+        `);
+        for (const itRow of itemRows) {
+          insOutbox.run(itRow.sync_id, JSON.stringify(itRow));
+        }
+      } catch {}
+
       if (advanceAmount > 0) {
-        db.prepare(`
+        const payRes = db.prepare(`
           INSERT INTO payments (
             booking_id, amount, payment_method, kind,
             received_by, note, paid_on, is_void
           ) VALUES (?, ?, ?, 'rental', ?, ?, ?, 0)
         `).run(bookingId, advanceAmount, advanceMethod, user.id, advanceNote, advanceDate);
+
+        try {
+          const payRow = db.prepare(`SELECT * FROM payments WHERE id = ?`).get(payRes.lastInsertRowid);
+          if (payRow) {
+            db.prepare(`
+              INSERT INTO sync_outbox (table_name, operation, record_sync_id, payload, status)
+              VALUES ('payments', 'INSERT', ?, ?, 'pending')
+            `).run(payRow.sync_id, JSON.stringify(payRow));
+          }
+        } catch {}
       }
 
       db.prepare(`
@@ -486,9 +525,8 @@ function createBookingsService(db) {
     if (!existing) throw new Error('Booking not found.');
 
     const doDelete = db.transaction(() => {
-      const now = `strftime('%Y-%m-%dT%H:%M:%fZ','now')`;
-      db.prepare(`UPDATE bookings      SET deleted_at = ${now} WHERE id = ?`).run(id);
-      db.prepare(`UPDATE booking_items SET deleted_at = ${now} WHERE booking_id = ?`).run(id);
+      db.prepare(`UPDATE bookings      SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).run(id);
+      db.prepare(`UPDATE booking_items SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE booking_id = ?`).run(id);
       db.prepare(`UPDATE payments      SET is_void = 1, void_reason = 'booking deleted' WHERE booking_id = ?`).run(id);
     });
 

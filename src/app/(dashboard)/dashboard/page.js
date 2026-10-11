@@ -4,7 +4,7 @@ import Link from 'next/link';
 import {
   Truck, RotateCcw, AlertTriangle, CreditCard,
   ArrowRight, Plus, Clock, Info,
-  Zap, BarChart2, UserPlus, Shirt, BookOpen,
+  Zap, BarChart2, UserPlus, Shirt, BookOpen, ShieldCheck,
 } from 'lucide-react';
 
 const STATUS_CHIP = {
@@ -18,6 +18,8 @@ export default function DashboardPage() {
   const [summary, setSummary]               = useState({ deliveries: 0, returns: 0, overdue: 0, pending: 0 });
   const [recentBookings, setRecentBookings] = useState([]);
   const [scheduleItems, setScheduleItems]   = useState([]);
+  const [backupStatus, setBackupStatus]     = useState(null);
+  const [syncState, setSyncState]           = useState(null);
   const [loading, setLoading]               = useState(true);
 
   const [user, setUser] = useState(() => {
@@ -41,13 +43,23 @@ export default function DashboardPage() {
     async function loadData() {
       setLoading(true);
       try {
-        const [sumRes, bookingsRes] = await Promise.all([
+        const [sumRes, bookingsRes, backupRes, syncRes] = await Promise.all([
           window.electronAPI?.bookings.todaySummary(),
           window.electronAPI?.bookings.list({ limit: 10 }),
+          window.electronAPI?.backup?.status?.(),
+          window.electronAPI?.sync?.status?.(),
         ]);
 
         if (sumRes?.ok) {
           setSummary(sumRes.data);
+        }
+
+        if (backupRes?.ok) {
+          setBackupStatus(backupRes);
+        }
+
+        if (syncRes?.ok && syncRes.data) {
+          setSyncState(syncRes.data);
         }
 
         if (bookingsRes?.ok) {
@@ -141,16 +153,99 @@ export default function DashboardPage() {
           <p className="page-subtitle">{todayStr} • {timeStr}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div className="sync-status sync-offline">
-            <span className="pulse-dot" style={{ background: '#f59e0b', animation: 'pulse-amber 2s infinite' }} />
-            Offline Mode
-          </div>
+          {backupStatus && !backupStatus.warning && (
+            <Link
+              href="/backup"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12,
+                padding: '4px 10px', background: '#ecfdf5', color: '#047857',
+                border: '1px solid #a7f3d0', borderRadius: 20, textDecoration: 'none', fontWeight: 600,
+              }}
+              title="Click to view backups"
+            >
+              <ShieldCheck size={13} color="#059669" />
+              {backupStatus.message}
+            </Link>
+          )}
+          {syncState && (
+            <Link
+              href="/settings"
+              className="sync-status"
+              style={{
+                textDecoration: 'none',
+                background: syncState.badgeType === 'danger' ? '#fef2f2' : syncState.badgeType === 'success' ? '#f0fdf4' : '#fffbeb',
+                color: syncState.badgeType === 'danger' ? '#b91c1c' : syncState.badgeType === 'success' ? '#15803d' : '#b45309',
+                border: `1px solid ${syncState.badgeType === 'danger' ? '#fecaca' : syncState.badgeType === 'success' ? '#bbf7d0' : '#fde68a'}`,
+                fontWeight: 600,
+                fontSize: 12,
+                padding: '4px 10px',
+                borderRadius: 20,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+              title="Click to view Cloud & Sync settings"
+            >
+              <span
+                className="pulse-dot"
+                style={{
+                  background: syncState.badgeType === 'danger' ? '#ef4444' : syncState.badgeType === 'success' ? '#10b981' : '#f59e0b',
+                }}
+              />
+              {syncState.badge}
+            </Link>
+          )}
           <Link href="/bookings/new" className="btn btn-primary">
             <Plus size={15} />
             New Booking
           </Link>
         </div>
       </div>
+
+      {/* ── Clash Alert Banner (Phase 13) ─────────────────────────── */}
+      {syncState?.clashCount > 0 && (
+        <div style={{
+          background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 10,
+          padding: '12px 18px', marginBottom: 18, display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', color: '#9f1239', fontSize: 13.5,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <AlertTriangle size={18} color="#e11d48" />
+            <div>
+              <strong style={{ display: 'block' }}>Booking Clash Detected! (Needs a look)</strong>
+              <span>Offline alag alag counters par same dress overlapping tareekhon par book ho chuki hai. Settings me ja kar review karein.</span>
+            </div>
+          </div>
+          <Link
+            href="/settings"
+            className="btn btn-sm btn-primary"
+            style={{ background: '#e11d48', borderColor: '#e11d48', fontWeight: 700 }}
+          >
+            Review Clashes
+          </Link>
+        </div>
+      )}
+
+      {/* ── 2-Day Backup Warning Banner (Phase 12) ────────────────── */}
+      {backupStatus?.warning && (
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10,
+          padding: '12px 18px', marginBottom: 18, display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', color: '#991b1b', fontSize: 13.5,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <AlertTriangle size={18} color="#dc2626" />
+            <span style={{ fontWeight: 600 }}>{backupStatus.message}</span>
+          </div>
+          <Link
+            href="/backup"
+            className="btn btn-sm btn-primary"
+            style={{ background: '#dc2626', borderColor: '#dc2626', fontWeight: 700 }}
+          >
+            Abhi Backup Lein
+          </Link>
+        </div>
+      )}
 
       <div className="page-body">
         {/* ── Stat Cards ──────────────────────────────────────────── */}

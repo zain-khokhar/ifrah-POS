@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, session } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 const http = require('http');
@@ -14,8 +14,11 @@ const { createBackupService }   = require('./backup/service');
 const { createAvailabilityService } = require('./availability/service');
 const { createSearchService }   = require('./search/service');
 const { createSettingsService } = require('./settings/service');
+const { createReceiptsService } = require('./receipts/service');
 const { createTrackingService } = require('./tracking/service');
 const { createReportsService } = require('./reports/service');
+const { createSyncService }    = require('./sync/service');
+const { importAccessData }     = require('../scripts/import-access');
 
 const isDev = process.env.ELECTRON_DEV === '1';
 const sessions = new Map();
@@ -32,6 +35,7 @@ let settingsService;
 let receiptsService;
 let tracking;
 let reports;
+let syncService;
 let staticServer = null;
 
 function getSession(event) { return sessions.get(event.sender.id); }
@@ -45,7 +49,12 @@ function safeHandler(handler) {
       if (error instanceof AuthorizationError)
         return { ok: false, code: error.code, message: error.message };
       console.error('[IPC]', error);
-      return { ok: false, message: error.message || 'Something went wrong.' };
+      // Clean, staff-friendly error message without technical SQL or internal dump
+      let msg = error.message || 'Kuch masla pesh aya hai.';
+      if (msg.includes('SQLITE_BUSY')) msg = 'Database masroof hai. Barah-e-karam dobara koshish karein.';
+      if (msg.includes('UNIQUE constraint failed')) msg = 'Ye record pehle se mojood hai (duplicate record).';
+      if (msg.includes('NOT NULL constraint failed')) msg = 'Zaroori maloomat darj nahi ki gayi.';
+      return { ok: false, message: msg };
     }
   };
 }
@@ -111,6 +120,7 @@ function startStaticServer(outDir) {
         'Content-Type': contentType,
         'Content-Length': fileData.length,
         'Cache-Control': 'no-cache',
+        'Content-Security-Policy': "default-src 'self' 'unsafe-inline' data:; connect-src 'self' https://*.supabase.co; img-src 'self' data: file: blob:; font-src 'self' data:;",
       });
       res.end(fileData);
     } catch (err) {
@@ -204,8 +214,38 @@ app.whenReady().then(async () => {
   receiptsService = createReceiptsService(db, settingsService, bookings);
   tracking        = createTrackingService(db, bookings, payments);
   reports         = createReportsService(db, settingsService);
+  syncService     = createSyncService(db);
+
+  // Phase 14: Hardened Content-Security-Policy enforcement
+  if (session && session.defaultSession) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src 'self' https://*.supabase.co http://127.0.0.1:* ws://127.0.0.1:* http://localhost:*; img-src 'self' data: file: blob:; font-src 'self' data:;",
+          ],
+        },
+      });
+    });
+  }
 
   seedDefaults();
+
+  // Phase 12: Automated daily backup check on startup
+  backup.autoBackupOnStartup().catch(err => {
+    console.warn('[Startup] Auto backup warning:', err.message);
+  });
+
+  // Phase 13: Supabase Cloud & Offline Sync on startup
+  syncService.syncNow().catch(err => {
+    console.warn('[Startup] Cloud sync notice:', err.message);
+  });
+
+  // Periodic background sync every 60 seconds
+  setInterval(() => {
+    if (syncService) syncService.syncNow().catch(() => {});
+  }, 60000);
 
   if (!isDev) {
     const outDir = path.resolve(__dirname, '../out');
@@ -221,7 +261,12 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
+  if (backup && typeof backup.autoBackupOnShutdown === 'function') {
+    try {
+      await backup.autoBackupOnShutdown();
+    } catch {}
+  }
   if (staticServer) {
     staticServer.close();
     staticServer = null;
@@ -246,6 +291,11 @@ ipcMain.handle('auth:session', safeHandler((event) => {
   const session = getSession(event);
   return session?.active ? { ok: true, user: session.user } : { ok: false };
 }));
+ipcMain.handle('auth:request-reset', safeHandler(async (_event, input) => auth.requestPasswordReset(input)));
+ipcMain.handle('auth:reset-with-code', safeHandler(async (_event, input) => auth.resetPasswordWithCode(input)));
+ipcMain.handle('auth:reset-with-key', safeHandler(async (_event, input) => auth.resetPasswordWithRecoveryKey(input)));
+ipcMain.handle('auth:recover-username', safeHandler(async (_event, input) => auth.recoverUsername(input)));
+ipcMain.handle('auth:get-recovery-key', safeHandler((event) => auth.getRecoveryKeyForOwner(getSession(event))));
 
 // ─── IPC — Users ───────────────────────────────────────────────────────────
 ipcMain.handle('users:list',    safeHandler((event)         => auth.listUsers(getSession(event))));
@@ -298,11 +348,15 @@ ipcMain.handle('payments:listByBooking',safeHandler((event, bookingId)  => ({ ok
 ipcMain.handle('payments:listAll',      safeHandler((event, filters)    => ({ ok: true, data: payments.listAll(getSession(event), filters) })));
 ipcMain.handle('payments:summary',      safeHandler((event, filters)    => ({ ok: true, data: payments.getSummary(getSession(event), filters) })));
 
-// ─── IPC — Backup ──────────────────────────────────────────────────────────
-ipcMain.handle('backup:create',       safeHandler((event, options)    => backup.createBackup(getSession(event), options)));
-ipcMain.handle('backup:chooseAndSave',safeHandler((event)             => backup.chooseAndSaveBackup(getSession(event))));
-ipcMain.handle('backup:list',         safeHandler((event)             => ({ ok: true, data: backup.listBackups(getSession(event)) })));
-ipcMain.handle('backup:openFolder',   safeHandler((event)             => backup.openBackupFolder(getSession(event))));
+// ─── IPC — Backup (Phase 5 & Phase 12) ──────────────────────────────────
+ipcMain.handle('backup:create',        safeHandler((event, options)    => backup.createBackup(getSession(event), options)));
+ipcMain.handle('backup:createArchive', safeHandler((event, options)    => backup.createArchiveBackup(getSession(event), options)));
+ipcMain.handle('backup:chooseAndSave', safeHandler((event)             => backup.chooseAndSaveBackup(getSession(event))));
+ipcMain.handle('backup:list',          safeHandler((event)             => ({ ok: true, data: backup.listBackups(getSession(event)) })));
+ipcMain.handle('backup:status',        safeHandler((event)             => backup.getStatus(getSession(event))));
+ipcMain.handle('backup:inspect',       safeHandler((event, filePath)   => backup.inspectBackup(getSession(event), filePath)));
+ipcMain.handle('backup:restore',       safeHandler((event, options)    => backup.restoreBackup(getSession(event), options)));
+ipcMain.handle('backup:openFolder',    safeHandler((event)             => backup.openBackupFolder(getSession(event))));
 
 // ─── IPC — Availability (Phase 6) ──────────────────────────────────────────
 ipcMain.handle('availability:checkClash',    safeHandler((event, params)  => ({ ok: true, data: availability.checkClash(getSession(event), params) })));
@@ -344,6 +398,34 @@ ipcMain.handle('reports:exportPdf',        safeHandler((event, params) => report
 ipcMain.handle('reports:print',            safeHandler((event, params) => reports.printDirect(getSession(event), params)));
 ipcMain.handle('reports:exportEverything', safeHandler((event, params) => reports.exportEverything(getSession(event), params)));
 ipcMain.handle('reports:printDailyPack',   safeHandler((event, params) => reports.printDailyPack(getSession(event), params)));
+
+// ─── IPC — Migration (Phase 11 MS Access) ──────────────────────────────────
+ipcMain.handle('migration:preview', safeHandler((event, params) => {
+  protect(event, [ROLES.OWNER]);
+  return { ok: true, data: importAccessData({ ...params, dryRun: true }) };
+}));
+ipcMain.handle('migration:run', safeHandler(async (event, params) => {
+  protect(event, [ROLES.OWNER]);
+  const activeDb = getDb();
+  const result = importAccessData({ ...params, dryRun: false, db: activeDb });
+
+  // Phase 13: Push imported data to Supabase Cloud immediately
+  try {
+    if (syncService && typeof syncService.syncNow === 'function') {
+      await syncService.syncNow();
+    }
+  } catch (syncErr) {
+    console.warn('[Migration] Note pushing imported data to Supabase:', syncErr.message);
+  }
+
+  return { ok: true, data: result };
+}));
+
+// ─── IPC — Sync (Phase 13 Supabase Cloud & Offline Sync) ───────────────────
+ipcMain.handle('sync:status',          safeHandler((event)            => ({ ok: true, data: syncService.getStatus() })));
+ipcMain.handle('sync:trigger',         safeHandler((event)            => syncService.syncNow()));
+ipcMain.handle('sync:setDeviceConfig', safeHandler((event, config)    => syncService.setDeviceConfig(getSession(event), config)));
+ipcMain.handle('sync:resolveClash',    safeHandler((event, bookingId) => syncService.resolveClash(getSession(event), bookingId)));
 
 // ─── IPC — App ─────────────────────────────────────────────────────────────
 ipcMain.handle('app:version',  safeHandler((event) => { protect(event, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]); return app.getVersion(); }));

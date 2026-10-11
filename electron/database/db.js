@@ -79,6 +79,36 @@ function runMigrations(db) {
 
   const emptyTablesToRecreate = [];
 
+  // Users recovery and contact columns
+  if (tableInfo('users').length > 0) {
+    if (!hasCol('users', 'email')) {
+      try { db.exec(`ALTER TABLE users ADD COLUMN email TEXT;`); } catch {}
+    }
+    if (!hasCol('users', 'phone')) {
+      try { db.exec(`ALTER TABLE users ADD COLUMN phone TEXT;`); } catch {}
+    }
+    if (!hasCol('users', 'recovery_key')) {
+      try { db.exec(`ALTER TABLE users ADD COLUMN recovery_key TEXT;`); } catch {}
+    }
+    if (!hasCol('users', 'recovery_pin')) {
+      try { db.exec(`ALTER TABLE users ADD COLUMN recovery_pin TEXT;`); } catch {}
+    }
+    if (!hasCol('users', 'reset_token')) {
+      try { db.exec(`ALTER TABLE users ADD COLUMN reset_token TEXT;`); } catch {}
+    }
+    if (!hasCol('users', 'reset_token_expires')) {
+      try { db.exec(`ALTER TABLE users ADD COLUMN reset_token_expires TEXT;`); } catch {}
+    }
+
+    try {
+      const ownersWithoutKey = db.prepare(`SELECT id, username FROM users WHERE role = 'owner' AND (recovery_key IS NULL OR recovery_key = '')`).all();
+      for (const o of ownersWithoutKey) {
+        const randKey = 'IFRAH-' + Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+        db.prepare(`UPDATE users SET recovery_key = ?, email = coalesce(email, 'admin@ifrahpos.com') WHERE id = ?`).run(randKey, o.id);
+      }
+    } catch {}
+  }
+
   if (tableInfo('customers').length > 0 && !hasCol('customers', 'cnic')) {
     if (rowCount('customers') === 0) emptyTablesToRecreate.push('customers');
     else {
@@ -178,6 +208,49 @@ function runMigrations(db) {
     console.warn('[DB] Settings init note:', err.message);
   }
 
+  // Phase 13: Sync clash flag & sync_state
+  if (tableInfo('bookings').length > 0 && !hasCol('bookings', 'clash_flag')) {
+    try { db.exec(`ALTER TABLE bookings ADD COLUMN clash_flag INTEGER NOT NULL DEFAULT 0;`); } catch {}
+  }
+  if (tableInfo('bookings').length > 0 && !hasCol('bookings', 'clash_note')) {
+    try { db.exec(`ALTER TABLE bookings ADD COLUMN clash_note TEXT DEFAULT NULL;`); } catch {}
+  }
+
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS sync_state (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    )`);
+    const stCount = db.prepare('SELECT count(*) as c FROM sync_state').get()?.c || 0;
+    if (stCount === 0) {
+      const insState = db.prepare('INSERT OR IGNORE INTO sync_state (key, value) VALUES (?, ?)');
+      const deviceId = 'pc_' + Math.random().toString(36).substring(2, 10);
+      insState.run('device_id', deviceId);
+      insState.run('device_name', 'Counter 1');
+      insState.run('booking_number_start', '412');
+      insState.run('sync_status', 'idle');
+      insState.run('last_sync_time', '');
+      insState.run('last_pull_cursor', '');
+      insState.run('shop_id', 'ifrah-pos-default');
+    }
+  } catch (err) {
+    console.warn('[DB] Sync state init note:', err.message);
+  }
+
+  // Phase 14: Performance indexes for 5,000+ bookings
+  try {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_bookings_dates ON bookings(delivery_date, returning_date, status);
+      CREATE INDEX IF NOT EXISTS idx_bookings_month ON bookings(booking_month);
+      CREATE INDEX IF NOT EXISTS idx_booking_items_dress_booking ON booking_items(dress_id, booking_id);
+      CREATE INDEX IF NOT EXISTS idx_customers_phone2 ON customers(phone2);
+      CREATE INDEX IF NOT EXISTS idx_bookings_clash ON bookings(clash_flag);
+    `);
+  } catch (err) {
+    console.warn('[DB] Performance indexes note:', err.message);
+  }
+
   if (emptyTablesToRecreate.length > 0) {
     db.pragma('foreign_keys = OFF');
     const order = ['booking_items', 'payments', 'bookings', 'dresses', 'customers', 'cities', 'casts'];
@@ -205,8 +278,10 @@ function closeDb() {
  * Returns the path where the DB file is stored (for backup).
  */
 function getDbPath() {
-  const userDataPath = app.getPath('userData');
-  return path.join(userDataPath, 'database', 'ifrah.sqlite');
+  const baseDir = (app && typeof app.getPath === 'function')
+    ? path.join(app.getPath('userData'), 'database')
+    : path.join(process.cwd(), 'database');
+  return path.join(baseDir, 'ifrah.sqlite');
 }
 
-module.exports = { getDb, closeDb, getDbPath };
+module.exports = { getDb, closeDb, getDbPath, runMigrations };

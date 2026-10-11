@@ -21,11 +21,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   auth: {
-    needsSetup: ()       => ipcRenderer.invoke('auth:needs-setup'),
-    setupOwner: (input)  => ipcRenderer.invoke('auth:setup-owner', input),
-    login:  (input)      => ipcRenderer.invoke('auth:login', input),
-    logout: ()           => ipcRenderer.invoke('auth:logout'),
-    session: ()          => ipcRenderer.invoke('auth:session'),
+    needsSetup: ()               => ipcRenderer.invoke('auth:needs-setup'),
+    setupOwner: (input)          => ipcRenderer.invoke('auth:setup-owner', input),
+    login:  (input)              => ipcRenderer.invoke('auth:login', input),
+    logout: ()                   => ipcRenderer.invoke('auth:logout'),
+    session: ()                  => ipcRenderer.invoke('auth:session'),
+    requestReset: (input)        => ipcRenderer.invoke('auth:request-reset', input),
+    resetWithCode: (input)       => ipcRenderer.invoke('auth:reset-with-code', input),
+    resetWithKey: (input)        => ipcRenderer.invoke('auth:reset-with-key', input),
+    recoverUsername: (input)     => ipcRenderer.invoke('auth:recover-username', input),
+    getRecoveryKey: ()           => ipcRenderer.invoke('auth:get-recovery-key'),
   },
 
   // ── Users (Owner only) ───────────────────────────────────────────────────
@@ -95,11 +100,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     summary:       (filters)        => ipcRenderer.invoke('payments:summary', filters),
   },
 
-  // ─── Backup ───────────────────────────────────────────────────────────────
+  // ─── Backup (Phase 5 & Phase 12) ──────────────────────────────────────────
   backup: {
     create:        (options)        => ipcRenderer.invoke('backup:create', options),
+    createArchive: (options)        => ipcRenderer.invoke('backup:createArchive', options),
     chooseAndSave: ()               => ipcRenderer.invoke('backup:chooseAndSave'),
     list:          ()               => ipcRenderer.invoke('backup:list'),
+    status:        ()               => ipcRenderer.invoke('backup:status'),
+    inspect:       (filePath)       => ipcRenderer.invoke('backup:inspect', filePath),
+    restore:       (options)        => ipcRenderer.invoke('backup:restore', options),
     openFolder:    ()               => ipcRenderer.invoke('backup:openFolder'),
   },
 
@@ -156,6 +165,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     print:            (params) => ipcRenderer.invoke('reports:print', params),
     exportEverything: (params) => ipcRenderer.invoke('reports:exportEverything', params),
     printDailyPack:   (params) => ipcRenderer.invoke('reports:printDailyPack', params),
+  },
+
+  // ─── Migration (Phase 11 MS Access) ───────────────────────────────────────
+  migration: {
+    preview: (params) => ipcRenderer.invoke('migration:preview', params),
+    run:     (params) => ipcRenderer.invoke('migration:run', params),
+  },
+
+  // ─── Sync (Phase 13 Supabase Cloud & Offline Sync) ────────────────────────
+  sync: {
+    status:          ()             => ipcRenderer.invoke('sync:status'),
+    trigger:         ()             => ipcRenderer.invoke('sync:trigger'),
+    setDeviceConfig: (config)       => ipcRenderer.invoke('sync:setDeviceConfig', config),
+    resolveClash:    (bookingId)    => ipcRenderer.invoke('sync:resolveClash', bookingId),
   },
 });
 

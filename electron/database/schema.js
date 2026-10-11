@@ -37,6 +37,12 @@ const SCHEMA_STATEMENTS = [
     password_hash   TEXT    NOT NULL,
     full_name       TEXT    NOT NULL,
     role            TEXT    NOT NULL CHECK(role IN ('owner','cashier','viewer')),
+    email           TEXT,
+    phone           TEXT,
+    recovery_key    TEXT,
+    recovery_pin    TEXT,
+    reset_token     TEXT,
+    reset_token_expires TEXT,
     is_active       INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -193,6 +199,8 @@ const SCHEMA_STATEMENTS = [
     amount_paid         INTEGER NOT NULL DEFAULT 0,       -- sum of valid rental payments
     remaining           INTEGER NOT NULL DEFAULT 0,       -- grand_total - amount_paid
     receipt_print_count INTEGER NOT NULL DEFAULT 0,       -- Phase 8 reprint tracking
+    clash_flag          INTEGER NOT NULL DEFAULT 0,       -- Phase 13 sync conflict clash flag (1 = Needs a look)
+    clash_note          TEXT    DEFAULT NULL,
     created_by          INTEGER REFERENCES users(id),
     updated_by          INTEGER REFERENCES users(id),
     created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -328,11 +336,25 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_audit_logs_user      ON audit_logs(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_audit_logs_table     ON audit_logs(table_name, record_id)`,
   `CREATE INDEX IF NOT EXISTS idx_sync_outbox_status   ON sync_outbox(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_bookings_dates       ON bookings(delivery_date, returning_date, status)`,
+  `CREATE INDEX IF NOT EXISTS idx_bookings_month       ON bookings(booking_month)`,
+  `CREATE INDEX IF NOT EXISTS idx_booking_items_dress_booking ON booking_items(dress_id, booking_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_customers_phone2     ON customers(phone2)`,
+  `CREATE INDEX IF NOT EXISTS idx_bookings_clash       ON bookings(clash_flag)`,
 
   // ──────────────────────────────────────────────────────────────────────────
   // 14. SETTINGS (Shop details, receipt footer, printer layout defaults)
   // ──────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS settings (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`,
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 15. SYNC_STATE (Device ID, counter block, sync cursors, timestamps)
+  // ──────────────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS sync_state (
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL,
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))

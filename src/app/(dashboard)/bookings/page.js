@@ -179,7 +179,16 @@ export default function BookingsPage() {
                         <span style={{ fontSize: 10.5, color: '#94a3b8' }}>Awaiting</span>
                       )}
                     </td>
-                    <td><StatusChip status={b.status} /></td>
+                    <td>
+                      <StatusChip status={b.status} />
+                      {b.clash_flag === 1 && (
+                        <div style={{ marginTop: 2 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: '#e11d48', background: '#ffe4e6', padding: '1px 6px', borderRadius: 4, display: 'inline-block' }}>
+                            ⚠️ Needs a look
+                          </span>
+                        </div>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>
                       {b.grand_total > 0 ? `Rs. ${b.grand_total.toLocaleString()}` : '—'}
                     </td>
