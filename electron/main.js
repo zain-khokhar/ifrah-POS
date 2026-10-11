@@ -67,19 +67,28 @@ function safeHandler(handler, options = {}) {
   return async (...args) => {
     try {
       if (!options.skipSecurityCheck) {
-        assertLicenseValid(app);
+        // Only enforce if a license file exists (i.e. machine has been activated before)
+        // Pre-activation: the activation IPC itself handles the flow
+        try {
+          assertLicenseValid(app);
+        } catch (secErr) {
+          const msg = secErr.message || '';
+          // Block on tamper/mismatch. Allow through on NO_LICENSE (unactivated) — UI handles it
+          if (msg.includes('HARDWARE_MISMATCH') || msg.includes('SIGNATURE_TAMPERED') || msg.includes('CORRUPTED_FILE')) {
+            return { ok: false, message: 'Security tasdeeq fail ho gayi. Ghair-tasdeeq shuda machine ya tampered file.' };
+          }
+          // NO_LICENSE — let the request proceed; the UI will show the ActivationModal
+        }
       }
       return await handler(...args);
     } catch (error) {
       if (error instanceof AuthorizationError)
         return { ok: false, code: error.code, message: error.message };
       console.error('[IPC]', error);
-      // Clean, staff-friendly error message without technical SQL or internal dump
       let msg = error.message || 'Kuch masla pesh aya hai.';
       if (msg.includes('SQLITE_BUSY')) msg = 'Database masroof hai. Barah-e-karam dobara koshish karein.';
       if (msg.includes('UNIQUE constraint failed')) msg = 'Ye record pehle se mojood hai (duplicate record).';
       if (msg.includes('NOT NULL constraint failed')) msg = 'Zaroori maloomat darj nahi ki gayi.';
-      if (msg.includes('SECURITY_BREACH')) msg = 'Security tasdeeq fail ho gayi: Ghair tasdeeq shuda machine.';
       return { ok: false, message: msg };
     }
   };
@@ -254,10 +263,11 @@ let appPort = 3000;
 
 // ─── App lifecycle ──────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
-  // Layer 4 & 5: Anti-Piracy Hardware Integrity check on startup
+  // Startup integrity check: only act on tamper/mismatch, not on unlicensed
   const licStatus = verifyLicense(app, { allowDissolve: true });
   if (!licStatus.licensed && licStatus.reason !== 'NO_LICENSE') {
     console.error('[License] Startup integrity check failed:', licStatus.reason);
+    // triggerDissolve already called inside verifyLicense for mismatch/tamper
   }
 
   const db  = getDb();

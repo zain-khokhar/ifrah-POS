@@ -1,4 +1,4 @@
--- ==============================================================================
+﻿-- ==============================================================================
 -- IFRAH POS — Cloud Licensing & Machine Binding Schema
 -- Run this in your Supabase SQL Editor (1-time setup)
 -- ==============================================================================
@@ -31,70 +31,49 @@ AS $$
 DECLARE
   v_lic RECORD;
 BEGIN
-  -- Normalize key
   p_license_key := UPPER(TRIM(p_license_key));
-
-  -- 1. Check if key exists
   SELECT * INTO v_lic FROM public.licenses WHERE UPPER(license_key) = p_license_key;
 
   IF NOT FOUND THEN
-    RETURN jsonb_build_object(
-      'ok', false,
-      'code', 'KEY_NOT_FOUND',
-      'message', 'License key darust nahi hai. Barah-e-karam dobara check karein.'
-    );
+    RETURN jsonb_build_object('ok', false, 'code', 'KEY_NOT_FOUND', 'message', 'License key darust nahi hai. Barah-e-karam dobara check karein.');
   END IF;
 
-  -- 2. Check if revoked/blocked by admin
   IF v_lic.status = 'revoked' THEN
-    RETURN jsonb_build_object(
-      'ok', false,
-      'code', 'KEY_REVOKED',
-      'message', 'Ye license block / revoke kiya ja chuka hai. Admin se rabta karein.'
-    );
+    RETURN jsonb_build_object('ok', false, 'code', 'KEY_REVOKED', 'message', 'Ye license block / revoke kiya ja chuka hai. Admin se rabta karein.');
   END IF;
 
-  -- 3. Device Mismatch (Piracy / Copy attempt on 2nd PC)
   IF v_lic.machine_hwid IS NOT NULL AND v_lic.machine_hwid <> p_hwid THEN
-    RETURN jsonb_build_object(
-      'ok', false,
-      'code', 'DEVICE_MISMATCH',
-      'message', 'Ye license key pehle se kisi doosre computer par use ho chuki hai. Aik license sirf aik PC par chalta hai.'
-    );
+    RETURN jsonb_build_object('ok', false, 'code', 'DEVICE_MISMATCH', 'message', 'Ye key pehle se kisi doosre computer par use ho chuki hai. Aik license sirf aik PC par chalta hai.');
   END IF;
 
-  -- 4. Re-activation on the SAME machine (e.g. app re-installed)
   IF v_lic.machine_hwid = p_hwid THEN
-    RETURN jsonb_build_object(
-      'ok', true,
-      'code', 'ALREADY_ACTIVE',
-      'client_name', v_lic.client_name,
-      'message', 'Machine pehle se registered hai.'
-    );
+    RETURN jsonb_build_object('ok', true, 'code', 'ALREADY_ACTIVE', 'client_name', v_lic.client_name, 'message', 'Machine pehle se registered hai.');
   END IF;
 
-  -- 5. First-time successful binding
   UPDATE public.licenses
-  SET
-    machine_hwid = p_hwid,
-    machine_code = p_machine_code,
-    status = 'claimed',
-    activated_at = now()
+  SET machine_hwid = p_hwid, machine_code = p_machine_code, status = 'claimed', activated_at = now()
   WHERE id = v_lic.id;
 
-  RETURN jsonb_build_object(
-    'ok', true,
-    'code', 'ACTIVATED',
-    'client_name', v_lic.client_name,
-    'message', 'License kamyabi se activate ho gaya hai.'
-  );
+  RETURN jsonb_build_object('ok', true, 'code', 'ACTIVATED', 'client_name', v_lic.client_name, 'message', 'License kamyabi se activate ho gaya hai.');
 END;
 $$;
 
 -- Allow anonymous desktop app to call this function
 GRANT EXECUTE ON FUNCTION public.claim_license(TEXT, TEXT, TEXT) TO anon, authenticated;
 
--- Sample Seed License for Testing
-INSERT INTO public.licenses (license_key, client_name, notes)
-VALUES ('IFRAH-DEMO-2026-KEY', 'Ifrah Boutique Main Branch', 'Demo test key')
+-- ============================================================
+-- 10 PRODUCTION LICENSE KEYS — For Distribution
+-- Ye keys apne clients ko deni hain
+-- ============================================================
+INSERT INTO public.licenses (license_key, client_name, notes) VALUES
+  ('IFRAH-2026-A1B2-C3D4', 'Client 01 - Boutique 1',  'License #01 — Zainkh'),
+  ('IFRAH-2026-E5F6-G7H8', 'Client 02 - Boutique 2',  'License #02 — Zainkh'),
+  ('IFRAH-2026-I9J0-K1L2', 'Client 03 - Boutique 3',  'License #03 — Zainkh'),
+  ('IFRAH-2026-M3N4-O5P6', 'Client 04 - Boutique 4',  'License #04 — Zainkh'),
+  ('IFRAH-2026-Q7R8-S9T0', 'Client 05 - Boutique 5',  'License #05 — Zainkh'),
+  ('IFRAH-2026-U1V2-W3X4', 'Client 06 - Boutique 6',  'License #06 — Zainkh'),
+  ('IFRAH-2026-Y5Z6-A7B8', 'Client 07 - Boutique 7',  'License #07 — Zainkh'),
+  ('IFRAH-2026-C9D0-E1F2', 'Client 08 - Boutique 8',  'License #08 — Zainkh'),
+  ('IFRAH-2026-G3H4-I5J6', 'Client 09 - Boutique 9',  'License #09 — Zainkh'),
+  ('IFRAH-2026-K7L8-M9N0', 'Client 10 - Boutique 10', 'License #10 — Zainkh')
 ON CONFLICT (license_key) DO NOTHING;
