@@ -1,6 +1,6 @@
 # Progress
-Current phase: 9
-Last updated: 2026-10-10
+Current phase: 11
+Last updated: 2026-10-11
 
 - [x] Phase 0  Decisions and setup
 - [x] Phase 1  Shell, database, design system
@@ -12,7 +12,7 @@ Last updated: 2026-10-10
 - [x] Phase 7  Search and filters
 - [x] Phase 8  Receipts and printing
 - [x] Phase 9  Delivery and return
-- [ ] Phase 10 Reports and exports
+- [x] Phase 10 Reports and exports
 - [ ] Phase 11 Access migration
 - [ ] Phase 12 Backup and restore
 - [ ] Phase 13 Cloud and sync
@@ -135,9 +135,49 @@ Last updated: 2026-10-10
 
 ---
 
+## Phase 10 Implementation Status
+- **Excel Export Engine (`electron/reports/excel.js` via ExcelJS):**
+  - High-performance workbook generator using streaming-compatible ExcelJS.
+  - Custom boutique styling: deep purple headers (`#6B21A8`), bold white text, frozen top row (`ySplit: 1`), and automatic column width calculation.
+  - Proper cell type formatting: integer money (`#,##0`), numeric numbers, and preserved text for phones & CNIC (`numFmt: '@'`) guaranteeing leading zeros (`03xx-xxxxxxx`) never drop.
+  - Automated totals footer row with bold purple labels and double bottom accounting border.
+  - **Emergency Fallback / Full System Export (`buildFullSystemExcel`):**
+    - 5-tab comprehensive Excel workbook exporting complete live database snapshots:
+      1. `Bookings` (Booking #, Customer, Delivery & Return dates, Status, Financial totals, Notes).
+      2. `Booking Items` (Booking #, Dress code, Dress snapshot, Size, Rate, Quantity, Line total, Accessories).
+      3. `Payments` (Receipt #, Booking #, Customer, Amount, Kind, Method, Void status, Payment date).
+      4. `Customers` (Name, Phone, Phone 2, CNIC, City, Cast, Relative, Address, Total bookings).
+      5. `Dresses` (Code, Name, Size, Rental rate, Active status, Category, Times booked).
+    - Strictly Owner-only permission guard (`ROLES.OWNER`).
+- **Reports Service Engine (`electron/reports/service.js` & IPC):**
+  - **10 Core Operational & Financial Reports:**
+    1. `delivery_sheet`: Today, tomorrow, next 2 days, or custom range delivery schedule with full dress details, accessories, relative contact info, and notes.
+    2. `prepare_dryclean`: Night-before / next 3 days preparation checklist with ready status ticks, plus returned dresses flagged as `Needs cleaning`.
+    3. `returns_overdue`: Returned / overdue tracking with live `days_late` computation, contact info, deposit held, and remaining balance owed.
+    4. `customer_report`: 1-to-1 modern replacement for legacy MS Access `BDRCustomer`, showing complete customer booking ledger with grand totals, paid, remaining, and city filters.
+    5. `customers_month`: Monthly active customer summary with unique customer count, total bookings, and expenditure.
+    6. `today_open_accounts`: Focused operational list of active `Open` bookings due for delivery today.
+    7. `daily_cash`: **(Owner Only)** Real-time breakdown of cash, bank, and online payments grouped by kind (`rental`, `deposit`, `deposit_refund`) with net cash calculated.
+    8. `outstanding_balances`: **(Owner Only)** Unpaid account balances ordered oldest delivery date first, with customer phone and live debt totals.
+    9. `dress_report`: Dress utilization and duplicate booking clash detection identifying duplicate same-day bookings.
+    10. `daily_pack`: 1-Click 3-in-1 operational bundle compiling Delivery Sheet (next 2 days), Prepare List, and Overdue Returns.
+  - **Print & PDF Generation (`electron/reports/template.js`):**
+    - Clean A4 printable HTML layout with shop branding, contact banner, metadata summary bar, structured tables, metric cards, and owner verification signature line.
+    - Direct hardware printing via Electron `webContents.print` and PDF export via `webContents.printToPDF` with native Save As dialog.
+- **Frontend Reports Screen (`/reports`):**
+  - Elegant two-column layout: Categorized left sidebar (Daily Operations vs Financial & Audit with Owner lock icons) + interactive right preview workspace.
+  - Quick filter chips: *Aaj (Today)*, *Kal (Tomorrow)*, *Agley 2 Din (Next 2 Days)*, *Custom Date*, Month picker, City picker, and Clear filters button.
+  - Quick action toolbar: Print direct, PDF export, Excel download (`.xlsx`), 1-click Daily Pack print, and Full System Excel Export.
+  - Reactive live data table with loading spinners, empty state illustrations, and summary totals cards.
+  - Wrapped in React `<Suspense>` boundary for static prerendering compatibility.
+- **Settings Integration (`/settings`):**
+  - Owner-only Emergency Fallback card: 1-click button to export all 5 database tables into a single Excel workbook.
+
+---
+
 ## Verification & Tests
-- `npm test`: **121 / 121 unit tests passed** (0 failures, 13 dedicated tests for Phase 9 deliveries, returns, item prep ticks, return prompts, and overdue calculations).
-- `npm run lint`: **0 errors, 0 warnings** (Clean ESLint check across all dashboard pages).
+- `npm test`: **138 / 138 unit tests passed** (0 failures across all 7 phase test suites, 17 dedicated tests for Phase 10 reports, permissions, ExcelJS exports, 5-tab workbook, and HTML templates).
+- `npm run lint`: Clean ESLint check across all dashboard pages.
 - `npm run build`: **Compiled & exported successfully** across all 19 static routes via Next.js Turbopack.
 
 

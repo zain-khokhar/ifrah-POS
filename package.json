@@ -13,7 +13,7 @@
     "start": "next start",
     "lint": "eslint src",
     "typecheck": "echo \"TypeScript check skipped (JS project)\"",
-    "test": "node --test electron/**/*.test.js electron/phase3/*.test.js electron/phase4/*.test.js"
+    "test": "node --test electron/auth/service.test.js electron/phase3/phase3.test.js electron/phase4/phase4.test.js electron/phase5/phase5.test.js electron/phase8/phase8.test.js electron/phase9/phase9.test.js electron/phase10/phase10.test.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.0.0",

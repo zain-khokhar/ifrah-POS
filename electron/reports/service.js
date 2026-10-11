@@ -818,11 +818,11 @@ function createReportsService(db, settingsService) {
 
     const dresses = db.prepare(`
       SELECT
-        d.id, d.code, d.name, d.color, d.default_rate, d.is_active,
+        d.id, d.code, d.name, d.size, d.rental_price, d.active,
         cat.name AS category,
         (SELECT COUNT(*) FROM booking_items WHERE dress_id = d.id AND deleted_at IS NULL) AS times_booked
       FROM dresses d
-      LEFT JOIN categories cat ON cat.id = d.category_id
+      LEFT JOIN dress_categories cat ON cat.id = d.category_id
       WHERE d.deleted_at IS NULL
       ORDER BY d.id ASC
     `).all();

@@ -99,8 +99,8 @@ describe('Phase 10 — Reports and Exports', () => {
     reportsService  = createReportsService(db, settingsService);
 
     // Seed cities
-    db.prepare(`INSERT INTO cities (id, name) VALUES (1, 'Lahore'), (2, 'Burewala')`).run();
-    db.prepare(`INSERT INTO relation_types (id, name) VALUES (1, 'Brother')`).run();
+    db.prepare(`INSERT INTO cities (id, name, name_normalized) VALUES (1, 'Lahore', 'lahore'), (2, 'Burewala', 'burewala')`).run();
+    db.prepare(`INSERT INTO relation_types (id, name, name_normalized) VALUES (1, 'Brother', 'brother')`).run();
 
     // Seed customers (with leading zeros in phone & CNIC)
     const c1 = db.prepare(`
@@ -117,13 +117,13 @@ describe('Phase 10 — Reports and Exports', () => {
 
     // Seed dresses
     const d1 = db.prepare(`
-      INSERT INTO dresses (name, code, default_rate, is_active, created_by, updated_by)
+      INSERT INTO dresses (name, code, rental_price, active, created_by, updated_by)
       VALUES ('Royal Crimson Lehenga', 'D-0001', 18000, 1, 1, 1)
     `).run();
     testDressId1 = d1.lastInsertRowid;
 
     const d2 = db.prepare(`
-      INSERT INTO dresses (name, code, default_rate, is_active, created_by, updated_by)
+      INSERT INTO dresses (name, code, rental_price, active, created_by, updated_by)
       VALUES ('Emerald Velvet Gharara', 'D-0002', 14000, 1, 1, 1)
     `).run();
     testDressId2 = d2.lastInsertRowid;
