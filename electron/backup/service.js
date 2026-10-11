@@ -611,6 +611,15 @@ function createBackupService(db, electronApp = null, electronDialog = null, elec
   // ─── Automated Startup Backup Runner ──────────────────────────────────────
   async function autoBackupOnStartup() {
     try {
+      // Don't auto-backup if database has no users or bookings yet
+      try {
+        const uCount = db.prepare('SELECT count(*) as c FROM users').get()?.c || 0;
+        const bCount = db.prepare('SELECT count(*) as c FROM bookings').get()?.c || 0;
+        if (uCount === 0 && bCount === 0) {
+          return { ok: true, created: false, skipped: true, reason: 'Empty database' };
+        }
+      } catch {}
+
       const todayPrefix = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const backupDir = getDefaultBackupDir();
       ensureDir(backupDir);
@@ -648,6 +657,35 @@ function createBackupService(db, electronApp = null, electronDialog = null, elec
   // ─── Automated Shutdown Backup Runner ─────────────────────────────────────
   async function autoBackupOnShutdown() {
     try {
+      // Don't auto-backup if database has no users or bookings yet
+      try {
+        const uCount = db.prepare('SELECT count(*) as c FROM users').get()?.c || 0;
+        const bCount = db.prepare('SELECT count(*) as c FROM bookings').get()?.c || 0;
+        if (uCount === 0 && bCount === 0) {
+          return { ok: true, created: false, skipped: true, reason: 'Empty database' };
+        }
+      } catch {}
+
+      const todayPrefix = new Date().toISOString().slice(0, 10);
+      const backupDir = getDefaultBackupDir();
+      ensureDir(backupDir);
+
+      // Only backup if no backup exists for today
+      const files = fs.readdirSync(backupDir);
+      const alreadyBackedUpToday = files.some(f => {
+        if (!f.startsWith('ifrah-backup-')) return false;
+        try {
+          const stat = fs.statSync(path.join(backupDir, f));
+          return stat.mtime.toISOString().slice(0, 10) === todayPrefix;
+        } catch {
+          return false;
+        }
+      });
+
+      if (alreadyBackedUpToday) {
+        return { ok: true, created: false, skipped: true, reason: 'Already backed up today' };
+      }
+
       console.log('[Backup] Running automatic shutdown backup...');
       const sysSession = { active: true, user: { id: 1, role: ROLES.OWNER, username: 'system_shutdown' } };
       return await createBackup(sysSession, { isManual: false });
