@@ -152,6 +152,9 @@ body {
   margin-left: 256px;
   min-height: 100vh;
   background: #f1f5f9;
+  flex: 1;
+  width: calc(100% - 256px);
+  min-width: 0;
 }
 
 /* ─── Page Header ──────────────────────────────────────────────── */

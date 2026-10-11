@@ -24,6 +24,20 @@ const MAX_LINES = 99;
 
 function createBookingsService(db) {
 
+  // Cleanup any legacy soft-deleted bookings so they don't block unique constraints
+  try {
+    const hasSoftDeleted = db.prepare(`SELECT 1 FROM bookings WHERE deleted_at IS NOT NULL LIMIT 1`).get();
+    if (hasSoftDeleted) {
+      db.transaction(() => {
+        db.prepare(`DELETE FROM booking_items WHERE booking_id IN (SELECT id FROM bookings WHERE deleted_at IS NOT NULL)`).run();
+        db.prepare(`DELETE FROM payments WHERE booking_id IN (SELECT id FROM bookings WHERE deleted_at IS NOT NULL)`).run();
+        db.prepare(`DELETE FROM bookings WHERE deleted_at IS NOT NULL`).run();
+      })();
+    }
+  } catch (err) {
+    console.warn('[Bookings] Cleanup soft-deleted bookings:', err?.message);
+  }
+
   // ─── Next booking number ──────────────────────────────────────────────────
   function nextBookingNo() {
     let blockStart = 412;
@@ -36,9 +50,15 @@ function createBookingsService(db) {
     } catch {}
 
     const row = db.prepare(
-      `SELECT MAX(booking_no) AS m FROM bookings WHERE deleted_at IS NULL AND booking_no >= ?`
+      `SELECT MAX(booking_no) AS m FROM bookings WHERE booking_no >= ?`
     ).get(blockStart);
-    return row?.m ? (row.m + 1) : blockStart;
+    let candidate = row?.m ? (row.m + 1) : blockStart;
+
+    // Safety check against any record in bookings table
+    while (db.prepare(`SELECT 1 FROM bookings WHERE booking_no = ? LIMIT 1`).get(candidate)) {
+      candidate++;
+    }
+    return candidate;
   }
 
   // ─── LIST ─────────────────────────────────────────────────────────────────
@@ -209,9 +229,9 @@ function createBookingsService(db) {
       throw new Error('Customer select karna zaroori hai. Pehle customer search karein ya naya customer banayein.');
     }
 
-    const bookingNo    = nextBookingNo();
+    let bookingNo    = nextBookingNo();
     const rawItems     = input.items || [];
-    const builtItems   = buildItems(bookingNo, rawItems);
+    let builtItems     = buildItems(bookingNo, rawItems);
     const discount     = Math.max(0, parseInt(input.discount || 0, 10));
     // Use raw items for total (they have quantity/rate)
     const grandTotal   = computeGrandTotal(rawItems, discount);
@@ -249,6 +269,12 @@ function createBookingsService(db) {
 
     let bookingId;
     const result = db.transaction(() => {
+      // Re-verify uniqueness inside transaction to prevent race conditions
+      while (db.prepare(`SELECT 1 FROM bookings WHERE booking_no = ? LIMIT 1`).get(bookingNo)) {
+        bookingNo++;
+        builtItems = buildItems(bookingNo, rawItems);
+      }
+
       const r = insertBooking.run(
         bookingNo,
         num(input.customer_id),
@@ -514,24 +540,24 @@ function createBookingsService(db) {
     return { ok: true };
   }
 
-  // ─── SOFT DELETE (Owner only) ─────────────────────────────────────────────
+  // ─── DELETE (Owner / Cashier) ─────────────────────────────────────────────
   function softDelete(session, id) {
-    requireRole(session, [ROLES.OWNER]);
+    requireRole(session, [ROLES.OWNER, ROLES.CASHIER]);
     const user = session.user;
 
     const existing = db.prepare(
-      `SELECT booking_no FROM bookings WHERE id = ? AND deleted_at IS NULL`
+      `SELECT * FROM bookings WHERE id = ?`
     ).get(id);
-    if (!existing) throw new Error('Booking not found.');
+    if (!existing) throw new Error('Booking nahi mili ya pehle se delete ho chuki hai.');
 
     const doDelete = db.transaction(() => {
-      db.prepare(`UPDATE bookings      SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).run(id);
-      db.prepare(`UPDATE booking_items SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE booking_id = ?`).run(id);
-      db.prepare(`UPDATE payments      SET is_void = 1, void_reason = 'booking deleted' WHERE booking_id = ?`).run(id);
+      db.prepare(`DELETE FROM payments WHERE booking_id = ?`).run(id);
+      db.prepare(`DELETE FROM booking_items WHERE booking_id = ?`).run(id);
+      db.prepare(`DELETE FROM bookings WHERE id = ?`).run(id);
     });
 
     withAudit(db, user, 'booking.delete', 'bookings', id,
-      { oldValues: { booking_no: existing.booking_no } },
+      { oldValues: { booking_no: existing.booking_no, sync_id: existing.sync_id } },
       doDelete,
     );
     return { ok: true };

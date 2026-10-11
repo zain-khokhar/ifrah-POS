@@ -2,6 +2,13 @@ function withAudit(db, user, action, tableName, recordId, changes, write) {
   if (!user) throw new Error('A user is required for audited writes.');
 
   const transaction = db.transaction(() => {
+    let preRow = null;
+    if (tableName && tableName !== 'settings' && recordId != null && typeof recordId !== 'function') {
+      try {
+        preRow = db.prepare(`SELECT * FROM ${tableName} WHERE id = ?`).get(recordId);
+      } catch {}
+    }
+
     const result = write();
     const resolvedRecordId = typeof recordId === 'function' ? recordId(result) : recordId;
     db.prepare(`
@@ -31,6 +38,9 @@ function withAudit(db, user, action, tableName, recordId, changes, write) {
           if (row && row.sync_id) {
             syncId = row.sync_id;
             payload = row;
+          } else if (preRow && preRow.sync_id) {
+            syncId = preRow.sync_id;
+            payload = changes?.oldValues || preRow;
           }
         }
 

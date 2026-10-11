@@ -52,7 +52,7 @@ export default function BookingsPage() {
   }, [search, status]);
 
   async function handleDelete(b) {
-    if (!window.confirm(`Booking #${b.booking_no} delete karein? Ye action undo ho sakta hai.`)) return;
+    if (!window.confirm(`Booking #${b.booking_no} delete karein? Ye booking database se permanently delete ho jayegi.`)) return;
     setDeleting(b.id);
     const res = await window.electronAPI?.bookings.delete(b.id);
     if (res?.ok === false) alert(res.message || 'Delete failed.');

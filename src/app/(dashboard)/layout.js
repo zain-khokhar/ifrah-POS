@@ -42,9 +42,9 @@ export default function DashboardLayout({ children }) {
   }, [router]);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', width: '100%' }}>
       <Sidebar />
-      <div className="main-content">
+      <div className="main-content" style={{ flex: 1, minWidth: 0, width: 'calc(100% - 256px)' }}>
         {children}
       </div>
     </div>

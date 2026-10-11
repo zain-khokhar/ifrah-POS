@@ -233,7 +233,81 @@ function createDressesService(db, app) {
     }
   }
 
-  return { list, get, suggestSimilar, nextCode, create, update, setActive, quickAdd };
+  // ─── BOOKED HISTORY ───────────────────────────────────────────────────────
+  function getHistory(session, dressId, { size = null } = {}) {
+    requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
+
+    const dress = get(session, dressId);
+    if (!dress) throw new Error('Dress nahi mila.');
+
+    let query = `
+      SELECT
+        b.id AS booking_id,
+        b.booking_no,
+        b.status,
+        b.booking_date,
+        b.delivery_date,
+        b.returning_date,
+        b.delivered_on,
+        b.returned_on,
+        b.grand_total,
+        b.amount_paid,
+        b.remaining,
+        cu.id   AS customer_id,
+        cu.name AS customer_name,
+        cu.phone AS customer_phone,
+        ci.name AS city,
+        bi.id   AS item_id,
+        bi.line_no,
+        bi.detail_no,
+        bi.size,
+        bi.quantity,
+        bi.rate,
+        bi.line_total,
+        bi.dress_name_snapshot,
+        bi.is_ready,
+        bi.description AS item_description
+      FROM booking_items bi
+      JOIN bookings b ON b.id = bi.booking_id
+      LEFT JOIN customers cu ON cu.id = b.customer_id
+      LEFT JOIN cities    ci ON ci.id = b.city_id
+      WHERE (bi.dress_id = ? OR (bi.dress_id IS NULL AND LOWER(TRIM(bi.dress_name_snapshot)) = LOWER(TRIM(?))))
+        AND bi.deleted_at IS NULL
+        AND b.deleted_at IS NULL
+    `;
+    const params = [dress.id, dress.name];
+
+    if (size && size.trim() && size.trim() !== 'all') {
+      query += ` AND LOWER(TRIM(COALESCE(bi.size, ''))) = LOWER(TRIM(?))`;
+      params.push(size.trim());
+    }
+
+    query += ` ORDER BY b.booking_no DESC`;
+
+    const bookings = db.prepare(query).all(...params);
+
+    const rawSizes = db.prepare(`
+      SELECT DISTINCT bi.size FROM booking_items bi
+      JOIN bookings b ON b.id = bi.booking_id
+      WHERE (bi.dress_id = ? OR (bi.dress_id IS NULL AND LOWER(TRIM(bi.dress_name_snapshot)) = LOWER(TRIM(?))))
+        AND bi.deleted_at IS NULL
+        AND b.deleted_at IS NULL
+        AND bi.size IS NOT NULL AND TRIM(bi.size) != ''
+    `).all(dress.id, dress.name);
+
+    const sizesAvailable = Array.from(new Set([
+      ...(dress.size ? [dress.size] : []),
+      ...rawSizes.map(r => r.size)
+    ].filter(Boolean)));
+
+    return {
+      dress,
+      sizesAvailable,
+      bookings,
+    };
+  }
+
+  return { list, get, suggestSimilar, nextCode, create, update, setActive, quickAdd, getHistory };
 }
 
 module.exports = { createDressesService };

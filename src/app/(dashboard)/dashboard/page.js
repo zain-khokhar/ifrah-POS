@@ -8,19 +8,19 @@ import {
 } from 'lucide-react';
 
 const STATUS_CHIP = {
-  None:    { bg: '#f1f5f9', color: '#64748b' },
-  Open:    { bg: '#dbeafe', color: '#1d4ed8' },
+  None: { bg: '#f1f5f9', color: '#64748b' },
+  Open: { bg: '#dbeafe', color: '#1d4ed8' },
   Pending: { bg: '#fef3c7', color: '#d97706' },
-  Closed:  { bg: '#dcfce7', color: '#16a34a' },
+  Closed: { bg: '#dcfce7', color: '#16a34a' },
 };
 
 export default function DashboardPage() {
-  const [summary, setSummary]               = useState({ deliveries: 0, returns: 0, overdue: 0, pending: 0 });
+  const [summary, setSummary] = useState({ deliveries: 0, returns: 0, overdue: 0, pending: 0 });
   const [recentBookings, setRecentBookings] = useState([]);
-  const [scheduleItems, setScheduleItems]   = useState([]);
-  const [backupStatus, setBackupStatus]     = useState(null);
-  const [syncState, setSyncState]           = useState(null);
-  const [loading, setLoading]               = useState(true);
+  const [scheduleItems, setScheduleItems] = useState([]);
+  const [backupStatus, setBackupStatus] = useState(null);
+  const [syncState, setSyncState] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const [user, setUser] = useState(() => {
     if (typeof window === 'undefined') return null;
@@ -404,11 +404,11 @@ export default function DashboardPage() {
               </div>
               <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {[
-                  { label: 'New Booking',  href: '/bookings/new', primary: true,  icon: Plus },
-                  { label: 'Add Customer', href: '/customers',    primary: false, icon: UserPlus },
-                  { label: 'Add Dress',    href: '/dresses',      primary: false, icon: Shirt },
-                  { label: 'Reports',     href: '/reports',      primary: false, icon: BarChart2 },
-                  { label: 'Deliveries',  href: '/deliveries',   primary: false, icon: Truck },
+                  { label: 'New Booking', href: '/bookings/new', primary: true, icon: Plus },
+                  { label: 'Add Customer', href: '/customers', primary: false, icon: UserPlus },
+                  { label: 'Add Dress', href: '/dresses', primary: false, icon: Shirt },
+                  { label: 'Reports', href: '/reports', primary: false, icon: BarChart2 },
+                  { label: 'Deliveries', href: '/deliveries', primary: false, icon: Truck },
                 ].map(a => {
                   const Icon = a.icon;
                   return (
@@ -422,20 +422,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* System Status */}
-            <div style={{
-              padding: '12px 14px',
-              background: 'linear-gradient(135deg, #ede9fe, #fdf4ff)',
-              borderRadius: 10,
-              border: '1px solid #ddd6fe',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>
-                <Info size={13} /> Offline-First POS
-              </div>
-              <div style={{ fontSize: 11.5, color: '#6d28d9', lineHeight: 1.5 }}>
-                Local SQLite database engine ready. Sab records shop computer par mehfooz rahenge.
-              </div>
-            </div>
+
           </div>
         </div>
       </div>

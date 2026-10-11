@@ -32,7 +32,7 @@ try {
   const electron = require('electron');
   BrowserWindow = electron.BrowserWindow;
   dialog = electron.dialog;
-} catch {}
+} catch { }
 
 function createReportsService(db, settingsService) {
 
@@ -152,8 +152,6 @@ function createReportsService(db, settingsService) {
         { header: 'Delivery Date', key: 'delivery_date', width: 14 },
         { header: 'Customer Name', key: 'customer_name', width: 22 },
         { header: 'Phone', key: 'customer_phone', isText: true, width: 16 },
-        { header: 'CNIC', key: 'customer_cnic', isText: true, width: 18 },
-        { header: 'Relative Info', key: 'relative_info', width: 20 },
         { header: 'City', key: 'city', width: 14 },
         { header: 'Dresses & Accessories', key: 'dresses_detailed', width: 36 },
         { header: 'Grand Total', key: 'grand_total', isMoney: true, width: 15 },
@@ -841,8 +839,8 @@ function createReportsService(db, settingsService) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
 
     const deliverySheet = getDeliverySheet(session, { range: 'next2days' });
-    const prepareList   = getPrepareDryCleanList(session);
-    const returnsList   = getReturnsDueAndOverdue(session);
+    const prepareList = getPrepareDryCleanList(session);
+    const returnsList = getReturnsDueAndOverdue(session);
 
     return {
       title: 'Rozana Ka Pack (Daily 3-in-1 Operations Pack)',
@@ -1026,7 +1024,7 @@ function createReportsService(db, settingsService) {
             landscape: reportData.columns?.length > 7,
             margins: { marginType: 'none' },
           });
-          try { win.destroy(); win = null; } catch {}
+          try { win.destroy(); win = null; } catch { }
 
           let finalPath = targetPath;
           if (!finalPath && dialog) {
@@ -1049,13 +1047,13 @@ function createReportsService(db, settingsService) {
 
           resolve({ ok: true, filePath: finalPath, recordCount: reportData.rows?.length || 0 });
         } catch (err) {
-          try { if (win) win.destroy(); } catch {}
+          try { if (win) win.destroy(); } catch { }
           reject(err);
         }
       });
 
       win.webContents.once('did-fail-load', (_e, code, desc) => {
-        try { win.destroy(); win = null; } catch {}
+        try { win.destroy(); win = null; } catch { }
         reject(new Error(`Failed to load report HTML for PDF: ${desc} (${code})`));
       });
     });
@@ -1089,7 +1087,7 @@ function createReportsService(db, settingsService) {
         if (printerName) printOptions.deviceName = printerName;
 
         win.webContents.print(printOptions, (success, failureReason) => {
-          try { win.destroy(); win = null; } catch {}
+          try { win.destroy(); win = null; } catch { }
           if (!success) {
             reject(new Error(failureReason || 'Print canceled or failed.'));
           } else {
@@ -1099,7 +1097,7 @@ function createReportsService(db, settingsService) {
       });
 
       win.webContents.once('did-fail-load', (_e, code, desc) => {
-        try { win.destroy(); win = null; } catch {}
+        try { win.destroy(); win = null; } catch { }
         reject(new Error(`Failed to load report HTML for printing: ${desc} (${code})`));
       });
     });
