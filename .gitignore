@@ -46,3 +46,6 @@ next-env.d.ts
 *.sqlite-wal
 *.sqlite-shm
 database/*.sqlite
+*.jsc
+.code_protection_backup
+

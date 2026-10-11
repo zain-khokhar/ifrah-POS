@@ -180,6 +180,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setDeviceConfig: (config)       => ipcRenderer.invoke('sync:setDeviceConfig', config),
     resolveClash:    (bookingId)    => ipcRenderer.invoke('sync:resolveClash', bookingId),
   },
+
+  // ─── Licensing & Anti-Piracy ──────────────────────────────────────────────
+  license: {
+    check:          ()          => ipcRenderer.invoke('license:check'),
+    getMachineCode: ()          => ipcRenderer.invoke('license:get-machine-code'),
+    activate:       (key)       => ipcRenderer.invoke('license:activate', key),
+  },
 });
 
 

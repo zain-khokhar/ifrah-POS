@@ -18,8 +18,27 @@ const { createReceiptsService } = require('./receipts/service');
 const { createTrackingService } = require('./tracking/service');
 const { createReportsService } = require('./reports/service');
 const { createSyncService }    = require('./sync/service');
+const { importAccessData }     = require('../scripts/import-access');
+const { verifyLicense }        = require('./licensing/validator');
+const { getFriendlyMachineCode } = require('./licensing/hwid');
+const { activateOnline }       = require('./licensing/activation');
+
+// Register bytenode runtime for V8 bytecode execution
+try {
+  require('bytenode');
+} catch {}
 
 const isDev = process.env.ELECTRON_DEV === '1';
+
+// Hardened Anti-Debugging: Strip inspection switches in production
+if (!isDev) {
+  try {
+    app.commandLine.removeSwitch('inspect');
+    app.commandLine.removeSwitch('inspect-brk');
+    app.commandLine.removeSwitch('remote-debugging-port');
+    app.commandLine.removeSwitch('disable-web-security');
+  } catch {}
+}
 const sessions = new Map();
 let auth;
 let lists;
@@ -159,8 +178,34 @@ function createWindow(serverPort) {
 
   win.once('ready-to-show', () => {
     win.show();
-    if (isDev) win.webContents.openDevTools({ mode: 'detach' });
+    if (isDev) {
+      win.webContents.openDevTools({ mode: 'detach' });
+    }
   });
+
+  if (!isDev) {
+    // Automatically close DevTools if triggered or attached
+    win.webContents.on('devtools-opened', () => {
+      win.webContents.closeDevTools();
+    });
+
+    // Block keyboard inspection shortcuts (F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, Ctrl+U, Ctrl+R)
+    win.webContents.on('before-input-event', (event, input) => {
+      const isCtrlOrCmd = input.control || input.meta;
+      if (
+        input.key === 'F12' ||
+        (isCtrlOrCmd && input.shift && ['I', 'i', 'J', 'j', 'C', 'c'].includes(input.key)) ||
+        (isCtrlOrCmd && ['U', 'u', 'R', 'r'].includes(input.key))
+      ) {
+        event.preventDefault();
+      }
+    });
+
+    // Block right-click context menu (prevents "Inspect Element")
+    win.webContents.on('context-menu', (event) => {
+      event.preventDefault();
+    });
+  }
 
   const appUrl = isDev ? 'http://localhost:3000' : `http://127.0.0.1:${serverPort}`;
   win.loadURL(appUrl);
@@ -199,6 +244,12 @@ let appPort = 3000;
 
 // ─── App lifecycle ──────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
+  // Layer 4 & 5: Anti-Piracy Hardware Integrity check on startup
+  const licStatus = verifyLicense(app, { allowDissolve: true });
+  if (!licStatus.licensed && licStatus.reason !== 'NO_LICENSE') {
+    console.error('[License] Startup integrity check failed:', licStatus.reason);
+  }
+
   const db  = getDb();
   auth         = createAuthService(db);
   lists        = createListsService(db);
@@ -436,3 +487,14 @@ ipcMain.handle('app:maximize', safeHandler((e) => {
   if (win?.isMaximized()) win.unmaximize(); else win?.maximize();
 }));
 ipcMain.handle('app:close', safeHandler((e) => { protect(e, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]); BrowserWindow.fromWebContents(e.sender)?.close(); }));
+
+// ─── IPC — Licensing & Anti-Piracy ──────────────────────────────────────────
+ipcMain.handle('license:check', safeHandler(() => {
+  return verifyLicense(app, { allowDissolve: true });
+}));
+ipcMain.handle('license:get-machine-code', safeHandler(() => {
+  return { ok: true, machineCode: getFriendlyMachineCode() };
+}));
+ipcMain.handle('license:activate', safeHandler(async (_event, key) => {
+  return await activateOnline(app, key);
+}));
