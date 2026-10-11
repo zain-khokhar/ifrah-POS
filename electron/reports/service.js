@@ -74,6 +74,11 @@ function createReportsService(db, settingsService) {
     } else if (range === 'next2days') {
       startDate = today;
       endDate = getNext2DaysIso();
+    } else if (range === 'upcoming') {
+      const future = new Date();
+      future.setDate(future.getDate() + 7);
+      startDate = today;
+      endDate = future.toISOString().slice(0, 10);
     } else if (range === 'custom' && dateFrom) {
       startDate = dateFrom;
       endDate = dateTo || dateFrom;
@@ -81,6 +86,10 @@ function createReportsService(db, settingsService) {
 
     const conditions = ['b.deleted_at IS NULL', 'b.delivery_date >= ?', 'b.delivery_date <= ?'];
     const params = [startDate, endDate];
+
+    if (excludeDelivered) {
+      conditions.push('b.delivered_on IS NULL');
+    }
 
     if (cityId) {
       conditions.push('b.city_id = ?');

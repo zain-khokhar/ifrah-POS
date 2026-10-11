@@ -247,7 +247,47 @@ function createCustomersService(db) {
     }
   }
 
-  return { list, get, findDuplicate, create, update, softDelete };
+  // ─── BOOKINGS FOR CUSTOMER ──────────────────────────────────────────────
+  function getBookings(session, customerId) {
+    requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
+
+    const customer = get(session, customerId);
+    if (!customer) throw new Error('Customer not found.');
+
+    const bookings = db.prepare(`
+      SELECT
+        b.id, b.booking_no, b.status,
+        b.booking_date, b.delivery_date, b.returning_date,
+        b.delivered_on, b.returned_on, b.return_condition,
+        b.booking_month, b.total_returning_days,
+        b.grand_total, b.amount_paid, b.remaining,
+        b.discount, b.security_deposit, b.notes,
+        ci.name AS city,
+        (SELECT group_concat(dress_name_snapshot, ', ') FROM booking_items WHERE booking_id = b.id AND deleted_at IS NULL) AS dresses_summary,
+        b.created_at, b.updated_at
+      FROM bookings b
+      LEFT JOIN cities ci ON ci.id = b.city_id
+      WHERE b.customer_id = ? AND b.deleted_at IS NULL
+      ORDER BY b.booking_no DESC
+    `).all(customerId);
+
+    for (const b of bookings) {
+      b.items = db.prepare(`
+        SELECT id, line_no, detail_no, dress_id, dress_name_snapshot,
+               size, quantity, rate, line_total, is_ready, description
+        FROM booking_items
+        WHERE booking_id = ? AND deleted_at IS NULL
+        ORDER BY line_no ASC
+      `).all(b.id);
+    }
+
+    return {
+      customer,
+      bookings
+    };
+  }
+
+  return { list, get, findDuplicate, create, update, softDelete, getBookings };
 }
 
 module.exports = { createCustomersService };

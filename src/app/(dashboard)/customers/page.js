@@ -4,8 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Plus, Search, Users, X, ChevronDown, Check,
   Phone, CreditCard, MapPin, User, Edit, Trash2, Eye,
-  RefreshCw, AlertCircle,
+  RefreshCw, AlertCircle, History, Calendar, Printer,
+  FileText, Sparkles, CheckCircle2, Clock
 } from 'lucide-react';
+import ReceiptModal from '@/components/ReceiptModal';
 import { formatPakPhone, cnicMask, validateCustomer } from '@/lib/customerValidation';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -502,6 +504,475 @@ function CustomerModal({ editCustomer, onClose, onSaved, userRole }) {
 
 const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 4 };
 
+// ─── Status Badge ────────────────────────────────────────────────────────────
+function StatusBadge({ status }) {
+  const map = {
+    None:      { cls: 'badge-gray',    label: 'None' },
+    Open:      { cls: 'badge-info',    label: 'Open' },
+    Pending:   { cls: 'badge-warning', label: 'Pending' },
+    Delivered: { cls: 'badge-success', label: 'Delivered' },
+    Returned:  { cls: 'badge-gray',    label: 'Returned' },
+    Closed:    { cls: 'badge-success', label: 'Closed' },
+  };
+  const s = map[status] || map.None;
+  return (
+    <span className={`badge ${s.cls}`} style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px' }}>
+      {s.label}
+    </span>
+  );
+}
+
+// ─── Customer Bookings History Modal ──────────────────────────────────────────
+function CustomerBookingsModal({ customer, onClose, onSelectBookingReceipt }) {
+  const [data, setData]             = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [search, setSearch]         = useState('');
+
+  useEffect(() => {
+    if (!customer?.id) return;
+    let active = true;
+
+    async function loadCustomerBookings() {
+      setLoading(true);
+      setError('');
+      try {
+        let loadedData = null;
+
+        // 1. Try customer-specific IPC
+        try {
+          const res = await window.electronAPI?.customers?.bookings?.(customer.id);
+          if (res?.ok && res.data) {
+            loadedData = res.data;
+          }
+        } catch (e) {}
+
+        // 2. Try customer history IPC
+        if (!loadedData) {
+          try {
+            const res2 = await window.electronAPI?.customers?.history?.(customer.id);
+            if (res2?.ok && res2.data) {
+              loadedData = res2.data;
+            }
+          } catch (e) {}
+        }
+
+        // 3. Robust client-side fallback via bookings.list
+        if (!loadedData) {
+          let listRes = await window.electronAPI?.bookings?.list({ customerId: customer.id, limit: 500 });
+          let allList = (listRes?.ok && Array.isArray(listRes.data)) ? listRes.data : [];
+
+          // Match by customer id, phone, or name
+          let matched = allList.filter(b =>
+            b.customer_id === customer.id ||
+            (customer.phone && b.customer_phone === customer.phone) ||
+            (customer.name && b.customer_name?.toLowerCase().trim() === customer.name?.toLowerCase().trim())
+          );
+
+          if (matched.length === 0) {
+            // Broad search fallback
+            const broadRes = await window.electronAPI?.bookings?.list({ limit: 1000 });
+            if (broadRes?.ok && Array.isArray(broadRes.data)) {
+              matched = broadRes.data.filter(b =>
+                b.customer_id === customer.id ||
+                (customer.phone && b.customer_phone === customer.phone) ||
+                (customer.name && b.customer_name?.toLowerCase().trim() === customer.name?.toLowerCase().trim())
+              );
+            }
+          }
+
+          // Fetch items for matched bookings
+          const enriched = await Promise.all(
+            matched.map(async (b) => {
+              try {
+                const full = await window.electronAPI?.bookings?.get(b.id);
+                if (full?.ok && full.data) {
+                  return {
+                    ...b,
+                    items: full.data.items || [],
+                  };
+                }
+              } catch (e) {}
+              return b;
+            })
+          );
+
+          enriched.sort((a, b) => (b.booking_no || 0) - (a.booking_no || 0));
+
+          loadedData = {
+            customer,
+            bookings: enriched,
+          };
+        }
+
+        if (active) {
+          setData(loadedData);
+        }
+      } catch (err) {
+        if (active) setError(err.message || 'Bookings load nahi ho sakeen.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadCustomerBookings();
+    return () => { active = false; };
+  }, [customer?.id]);
+
+  const rawBookings = data?.bookings || [];
+
+  // Filter by status & search
+  const filteredBookings = rawBookings.filter(b => {
+    if (statusFilter !== 'all') {
+      const bStatus = (b.status || '').toLowerCase();
+      if (statusFilter === 'open' && bStatus !== 'open') return false;
+      if (statusFilter === 'pending' && bStatus !== 'pending') return false;
+      if (statusFilter === 'delivered' && bStatus !== 'delivered' && !b.delivered_on) return false;
+      if (statusFilter === 'closed' && bStatus !== 'closed' && bStatus !== 'returned') return false;
+    }
+
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const matchNo = String(b.booking_no || '').includes(q);
+      const matchDresses = (b.dresses_summary || '').toLowerCase().includes(q);
+      const matchItems = (b.items || []).some(it =>
+        (it.dress_name_snapshot || '').toLowerCase().includes(q) ||
+        (it.size || '').toLowerCase().includes(q)
+      );
+      const matchNotes = (b.notes || '').toLowerCase().includes(q);
+      if (!matchNo && !matchDresses && !matchItems && !matchNotes) return false;
+    }
+
+    return true;
+  });
+
+  // Calculate summary metrics
+  const totalAmount = rawBookings.reduce((sum, b) => sum + (b.grand_total || 0), 0);
+  const totalPaid   = rawBookings.reduce((sum, b) => sum + (b.amount_paid || 0), 0);
+  const totalDue    = rawBookings.reduce((sum, b) => sum + (b.remaining || 0), 0);
+
+  const statusCounts = {
+    all: rawBookings.length,
+    open: rawBookings.filter(b => (b.status || '').toLowerCase() === 'open').length,
+    pending: rawBookings.filter(b => (b.status || '').toLowerCase() === 'pending').length,
+    delivered: rawBookings.filter(b => (b.status || '').toLowerCase() === 'delivered' || b.delivered_on).length,
+    closed: rawBookings.filter(b => ['closed', 'returned'].includes((b.status || '').toLowerCase())).length,
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+    }}>
+      <div style={{
+        background: 'white', borderRadius: 14, width: '100%', maxWidth: 1040,
+        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 24px 50px rgba(0,0,0,0.25)', overflow: 'hidden'
+      }}>
+        {/* Modal Header */}
+        <div style={{
+          padding: '18px 24px', borderBottom: '1px solid #e2e8f0',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+          background: '#f8fafc'
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: '50%', background: '#7c3aed',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', fontWeight: 800, fontSize: 16, boxShadow: '0 2px 6px rgba(124,58,237,0.3)'
+              }}>
+                {(customer.name || 'C')[0].toUpperCase()}
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <h2 style={{ fontSize: 19, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                    {customer.name}
+                  </h2>
+                  <span className="badge badge-purple" style={{ fontSize: 11, fontWeight: 700 }}>
+                    {rawBookings.length} {rawBookings.length === 1 ? 'Booking' : 'Bookings'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, flexWrap: 'wrap', fontSize: 12.5, color: '#64748b' }}>
+                  {customer.phone && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'monospace', fontWeight: 600 }}>
+                      <Phone size={12} style={{ color: '#7c3aed' }} /> {customer.phone}
+                    </span>
+                  )}
+                  {customer.cnic && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'monospace' }}>
+                      <CreditCard size={12} /> {customer.cnic}
+                    </span>
+                  )}
+                  {(customer.city || customer.cast) && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <MapPin size={12} /> {[customer.city, customer.cast].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                  {customer.relative_name && (
+                    <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: 4, color: '#475569' }}>
+                      {customer.relative_name} {customer.relation_type ? `(${customer.relation_type})` : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: '#f1f5f9', border: 'none', borderRadius: '50%',
+              width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: '#64748b'
+            }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Financial KPI Summary Cards */}
+        <div style={{
+          padding: '12px 24px', background: '#fcfcfd', borderBottom: '1px solid #f1f5f9',
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12
+        }}>
+          <div style={{ background: 'white', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              Total Bookings
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+              {rawBookings.length}
+            </div>
+          </div>
+          <div style={{ background: 'white', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              Total Business
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+              Rs. {totalAmount.toLocaleString()}
+            </div>
+          </div>
+          <div style={{ background: 'white', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              Total Paid
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a', marginTop: 2 }}>
+              Rs. {totalPaid.toLocaleString()}
+            </div>
+          </div>
+          <div style={{ background: 'white', padding: '10px 14px', borderRadius: 8, border: totalDue > 0 ? '1px solid #fecaca' : '1px solid #bbf7d0', background: totalDue > 0 ? '#fff5f5' : '#f0fdf4' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: totalDue > 0 ? '#dc2626' : '#16a34a', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              {totalDue > 0 ? 'Remaining Balance' : 'Balance Status'}
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: totalDue > 0 ? '#dc2626' : '#16a34a', marginTop: 2 }}>
+              {totalDue > 0 ? `Rs. ${totalDue.toLocaleString()}` : 'Fully Cleared ✓'}
+            </div>
+          </div>
+        </div>
+
+        {/* Filter Bar */}
+        <div style={{
+          padding: '12px 24px', borderBottom: '1px solid #f1f5f9',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          background: '#ffffff'
+        }}>
+          {/* Status Filter Pills */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {[
+              { id: 'all',       label: `All (${statusCounts.all})` },
+              { id: 'open',      label: `Open (${statusCounts.open})` },
+              { id: 'pending',   label: `Pending (${statusCounts.pending})` },
+              { id: 'delivered', label: `Delivered (${statusCounts.delivered})` },
+              { id: 'closed',    label: `Closed (${statusCounts.closed})` },
+            ].map(f => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setStatusFilter(f.id)}
+                style={{
+                  padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  border: statusFilter === f.id ? '1.5px solid #7c3aed' : '1px solid #cbd5e1',
+                  background: statusFilter === f.id ? '#7c3aed' : '#ffffff',
+                  color: statusFilter === f.id ? '#ffffff' : '#475569',
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Quick Search */}
+          <div style={{ position: 'relative', marginLeft: 'auto', minWidth: 220, flex: '0 1 260px' }}>
+            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input
+              type="text"
+              className="form-input"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Booking # ya dress search..."
+              style={{ paddingLeft: 30, height: 32, fontSize: 12 }}
+            />
+          </div>
+        </div>
+
+        {/* Modal Body / Table */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
+          {loading ? (
+            <div style={{ padding: 48, textAlign: 'center', color: '#64748b' }}>
+              <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
+              <div>Bookings load ho rahi hain...</div>
+            </div>
+          ) : error ? (
+            <div style={{ padding: 32, textAlign: 'center', color: '#ef4444' }}>
+              {error}
+            </div>
+          ) : filteredBookings.length === 0 ? (
+            <div style={{ padding: 56, textAlign: 'center', color: '#64748b' }}>
+              <History size={40} style={{ marginBottom: 12, opacity: 0.35, color: '#7c3aed' }} />
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+                Koi booking record nahi mila
+              </div>
+              <p style={{ fontSize: 13, color: '#64748b', maxWidth: 360, margin: '0 auto' }}>
+                {statusFilter !== 'all' || search
+                  ? 'Is filter ke mutabiq koi booking nahi mili.'
+                  : 'Is customer ki abhi tak koi booking record nahi hui.'}
+              </p>
+            </div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 95 }}>Booking #</th>
+                  <th style={{ width: 140 }}>Dates</th>
+                  <th>Dresses Booked</th>
+                  <th style={{ textAlign: 'right', width: 150 }}>Financials</th>
+                  <th style={{ textAlign: 'center', width: 100 }}>Status</th>
+                  <th style={{ textAlign: 'center', width: 110 }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredBookings.map(b => (
+                  <tr
+                    key={b.id}
+                    onClick={() => onSelectBookingReceipt(b.id)}
+                    style={{ cursor: 'pointer' }}
+                    title="Click karein receipt dekhne ke liye"
+                  >
+                    {/* Booking # */}
+                    <td>
+                      <div style={{ fontWeight: 800, color: '#7c3aed', fontSize: 14 }}>
+                        #{b.booking_no}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
+                        {b.booking_date || '—'}
+                      </div>
+                    </td>
+
+                    {/* Dates */}
+                    <td>
+                      <div style={{ fontSize: 12.5, color: '#0f172a', fontWeight: 600 }}>
+                        Pohnch: {b.delivery_date || '—'}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
+                        Wapsi: {b.returning_date || 'Open'}
+                      </div>
+                      {b.delivered_on && (
+                        <div style={{ fontSize: 10.5, color: '#16a34a', marginTop: 2, fontWeight: 600 }}>
+                          ✓ Delivered
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Dresses */}
+                    <td>
+                      {b.items && b.items.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {b.items.map(it => (
+                            <div key={it.id || it.detail_no || it.line_no} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                              <span style={{ fontWeight: 600, color: '#0f172a' }}>
+                                {it.dress_name_snapshot || 'Dress'}
+                              </span>
+                              {it.size && (
+                                <span className="badge badge-gray" style={{ fontSize: 10, padding: '1px 6px', fontWeight: 700 }}>
+                                  {it.size}
+                                </span>
+                              )}
+                              <span style={{ fontSize: 11.5, color: '#64748b', marginLeft: 'auto' }}>
+                                Rs. {(it.rate || it.line_total || 0).toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 13, color: '#334155', fontWeight: 500 }}>
+                          {b.dresses_summary || 'Dress items'}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Financials */}
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13.5 }}>
+                        Rs. {(b.grand_total || 0).toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>
+                        Paid: Rs. {(b.amount_paid || 0).toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: (b.remaining || 0) > 0 ? '#dc2626' : '#16a34a', marginTop: 1 }}>
+                        {(b.remaining || 0) > 0 ? `Rs. ${(b.remaining || 0).toLocaleString()} Due` : 'Fully Paid ✓'}
+                      </div>
+                    </td>
+
+                    {/* Status */}
+                    <td style={{ textAlign: 'center' }}>
+                      <StatusBadge status={b.status} />
+                    </td>
+
+                    {/* Action */}
+                    <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => onSelectBookingReceipt(b.id)}
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          padding: '4px 10px',
+                          color: '#7c3aed',
+                          borderColor: '#ddd6fe',
+                          background: '#f5f3ff'
+                        }}
+                        title="Is booking ki receipt dekhein / print karein"
+                      >
+                        <Printer size={13} /> Receipt
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div style={{
+          padding: '12px 24px', borderTop: '1px solid #e2e8f0',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: '#f8fafc'
+        }}>
+          <span style={{ fontSize: 13, color: '#64748b' }}>
+            Showing <strong>{filteredBookings.length}</strong> of {rawBookings.length} bookings
+          </span>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Band Karein
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function CustomersPage() {
   const [customers, setCustomers] = useState([]);
@@ -514,6 +985,11 @@ export default function CustomersPage() {
   const [modal,     setModal]     = useState(null);  // null | 'new' | customer-object
   const [userRole,  setUserRole]  = useState('viewer');
   const [deleting,  setDeleting]  = useState(null);
+
+  // Customer Bookings History & Receipt Modal state
+  const [historyCustomer,  setHistoryCustomer]  = useState(null);
+  const [printBookingId,   setPrintBookingId]   = useState(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
 
   // Get current user role
   useEffect(() => {
@@ -651,7 +1127,12 @@ export default function CustomersPage() {
               </thead>
               <tbody>
                 {customers.map((c, i) => (
-                  <tr key={c.id}>
+                  <tr
+                    key={c.id}
+                    onClick={() => setHistoryCustomer(c)}
+                    style={{ cursor: 'pointer' }}
+                    title="Is customer ki tamam bookings dekhne ke liye click karein"
+                  >
                     <td style={{ color: '#94a3b8', fontSize: 12 }}>{i + 1}</td>
                     <td>
                       <div style={{ fontWeight: 700, color: '#0f172a' }}>{c.name}</div>
@@ -677,11 +1158,37 @@ export default function CustomersPage() {
                       {c.city && <div style={{ fontSize: 13 }}>{c.city}</div>}
                       {c.cast && <div style={{ fontSize: 11.5, color: '#94a3b8' }}>{c.cast}</div>}
                     </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span className="badge badge-purple">{c.booking_count}</span>
+                    <td style={{ textAlign: 'center' }} onClick={e => { e.stopPropagation(); setHistoryCustomer(c); }}>
+                      <span
+                        className="badge badge-purple"
+                        style={{
+                          cursor: 'pointer',
+                          fontWeight: 800,
+                          padding: '3px 10px',
+                          boxShadow: '0 1px 3px rgba(124,58,237,0.15)'
+                        }}
+                        title="Click to view all bookings"
+                      >
+                        {c.booking_count}
+                      </span>
                     </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 5 }}>
+                    <td onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{
+                            color: '#7c3aed',
+                            borderColor: '#ddd6fe',
+                            background: '#f5f3ff',
+                            fontWeight: 600,
+                            fontSize: 12
+                          }}
+                          onClick={() => setHistoryCustomer(c)}
+                          title="Is customer ki bookings dekhein"
+                        >
+                          <History size={12} /> Bookings
+                        </button>
                         {!isViewer && (
                           <button className="btn btn-secondary btn-sm" onClick={() => setModal(c)}>
                             <Edit size={12} /> Edit
@@ -713,13 +1220,40 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Customer Form Modal */}
       {modal && (
         <CustomerModal
           editCustomer={modal === 'new' ? null : modal}
           onClose={() => setModal(null)}
           onSaved={loadCustomers}
           userRole={userRole}
+        />
+      )}
+
+      {/* Customer Bookings History Modal */}
+      {historyCustomer && (
+        <CustomerBookingsModal
+          customer={historyCustomer}
+          onClose={() => setHistoryCustomer(null)}
+          onSelectBookingReceipt={(bookingId) => {
+            setPrintBookingId(bookingId);
+            setShowReceiptModal(true);
+          }}
+        />
+      )}
+
+      {/* Receipt Modal */}
+      {showReceiptModal && printBookingId && (
+        <ReceiptModal
+          bookingId={printBookingId}
+          isOpen={showReceiptModal}
+          onClose={() => {
+            setShowReceiptModal(false);
+            setPrintBookingId(null);
+          }}
+          onPrintComplete={() => {
+            loadCustomers();
+          }}
         />
       )}
     </div>

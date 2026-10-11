@@ -388,6 +388,8 @@ ipcMain.handle('customers:findDuplicate', safeHandler((_e, name, phone)  => ({ o
 ipcMain.handle('customers:create',        safeHandler((event, input)     => ({ ok: true, ...customers.create(getSession(event), input) })));
 ipcMain.handle('customers:update',        safeHandler((event, id, input) => customers.update(getSession(event), id, input)));
 ipcMain.handle('customers:delete',        safeHandler((event, id)        => customers.softDelete(getSession(event), id)));
+ipcMain.handle('customers:bookings',      safeHandler((event, id)        => ({ ok: true, data: customers.getBookings(getSession(event), id) })));
+ipcMain.handle('customers:history',       safeHandler((event, id)        => ({ ok: true, data: customers.getBookings(getSession(event), id) })));
 
 // ─── IPC — Dresses ─────────────────────────────────────────────────────────
 ipcMain.handle('dresses:list',          safeHandler((event, filters) => ({ ok: true, data: dresses.list(getSession(event), filters) })));
