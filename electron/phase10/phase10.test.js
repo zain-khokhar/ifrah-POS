@@ -219,6 +219,52 @@ describe('Phase 10 — Reports and Exports', () => {
       const report = reportsService.getDeliverySheet(viewerSession, { range: 'today' });
       assert.ok(report.rows.length >= 1);
     });
+
+    it('has exact 7 UI-aligned columns and formats multiline fields for UI and exports', () => {
+      const report = reportsService.getDeliverySheet(cashierSession, {
+        range: 'today',
+        excludeDelivered: true,
+      });
+
+      assert.equal(report.columns.length, 7);
+      const expectedHeaders = [
+        'BOOKING #',
+        'CUSTOMER',
+        'DELIVERY DATE',
+        'RETURN DATE',
+        'DRESSES & PREPARATION (NIGHT-BEFORE READY)',
+        'PAYMENT DUE',
+        'STATUS',
+      ];
+      assert.deepEqual(report.columns.map(c => c.header), expectedHeaders);
+
+      const b1 = report.rows.find(r => r.id === b1Id);
+      assert.ok(b1);
+      assert.ok(b1.booking_display.includes('#'));
+      assert.ok(b1.customer_display.includes('Fatima Zahra'));
+      assert.ok(b1.customer_display.includes('03001234567'));
+      assert.ok(b1.dresses_prep_display.includes('Royal Crimson Lehenga'));
+      assert.ok(b1.payment_due_display.includes('10,000'));
+      assert.equal(b1.status_display, 'Pending');
+    });
+
+    it('supports pending, delivered, and all filters with search', () => {
+      const pendingReport = reportsService.getDeliverySheet(ownerSession, {
+        filter: 'pending',
+      });
+      assert.ok(pendingReport.rows.every(r => !r.delivered_on));
+
+      const deliveredReport = reportsService.getDeliverySheet(ownerSession, {
+        filter: 'delivered',
+      });
+      assert.ok(deliveredReport.rows.every(r => Boolean(r.delivered_on)));
+
+      const searchReport = reportsService.getDeliverySheet(ownerSession, {
+        filter: 'all',
+        search: 'Fatima',
+      });
+      assert.ok(searchReport.rows.some(r => r.customer_name === 'Fatima Zahra'));
+    });
   });
 
   describe('2. Prepare & Dry-Clean Operations List', () => {

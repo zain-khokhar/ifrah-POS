@@ -178,15 +178,12 @@ function DeliveriesContent() {
     setExportingPdf(true);
     setActionMessage('');
     try {
-      let reportRange = 'today';
-      if (filter === 'tomorrow') reportRange = 'tomorrow';
-      else if (filter === 'next2days') reportRange = 'next2days';
-      else if (filter === 'upcoming') reportRange = 'upcoming';
-
       const res = await window.electronAPI?.reports?.exportPdf({
         reportType: 'delivery_sheet',
         filters: {
-          range: reportRange,
+          filter,
+          range: filter,
+          search: search || '',
           excludeDelivered: filter !== 'delivered' && filter !== 'all',
         },
       });
@@ -207,15 +204,12 @@ function DeliveriesContent() {
     setExportingExcel(true);
     setActionMessage('');
     try {
-      let reportRange = 'today';
-      if (filter === 'tomorrow') reportRange = 'tomorrow';
-      else if (filter === 'next2days') reportRange = 'next2days';
-      else if (filter === 'upcoming') reportRange = 'upcoming';
-
       const res = await window.electronAPI?.reports?.exportExcel({
         reportType: 'delivery_sheet',
         filters: {
-          range: reportRange,
+          filter,
+          range: filter,
+          search: search || '',
           excludeDelivered: filter !== 'delivered' && filter !== 'all',
         },
       });

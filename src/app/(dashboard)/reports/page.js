@@ -692,7 +692,7 @@ function ReportsContent() {
                             }
 
                             return (
-                              <td key={col.key} style={{ fontSize: 12.5 }}>
+                              <td key={col.key} style={{ fontSize: 12.5, whiteSpace: 'pre-line', verticalAlign: 'top' }}>
                                 {val ?? '—'}
                               </td>
                             );
