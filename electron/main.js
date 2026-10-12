@@ -373,7 +373,7 @@ ipcMain.handle('users:create',  safeHandler((event, input)  => auth.createUser(g
 ipcMain.handle('users:disable', safeHandler((event, userId) => auth.disableUser(getSession(event), userId)));
 
 // ─── IPC — Audit ───────────────────────────────────────────────────────────
-ipcMain.handle('audit:list', safeHandler((event) => auth.listAuditLogs(getSession(event))));
+ipcMain.handle('audit:list', safeHandler((event, params) => auth.listAuditLogs(getSession(event), params)));
 
 // ─── IPC — Lists (learning dropdowns) ──────────────────────────────────────
 ipcMain.handle('lists:get',     safeHandler((_e, tableName)           => ({ ok: true, data: lists.list(tableName) })));

@@ -42,7 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── Audit (Owner only) ────────────────────────────────────────────────────
   audit: {
-    list: () => ipcRenderer.invoke('audit:list'),
+    list: (params) => ipcRenderer.invoke('audit:list', params),
   },
 
   // ── Lists — learning dropdowns ────────────────────────────────────────────

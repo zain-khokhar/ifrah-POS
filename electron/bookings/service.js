@@ -540,9 +540,9 @@ function createBookingsService(db) {
     return { ok: true };
   }
 
-  // ─── DELETE (Owner / Cashier) ─────────────────────────────────────────────
+  // ─── DELETE (Owner only) ──────────────────────────────────────────────────
   function softDelete(session, id) {
-    requireRole(session, [ROLES.OWNER, ROLES.CASHIER]);
+    requireRole(session, [ROLES.OWNER]);
     const user = session.user;
 
     const existing = db.prepare(

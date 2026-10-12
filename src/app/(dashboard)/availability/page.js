@@ -17,33 +17,22 @@ import {
 } from 'lucide-react';
 
 // ─── Date input helper ──────────────────────────────────────────────────────
-function DateInput({ value, onChange, placeholder, id, label }) {
-  const [display, setDisplay] = useState(() => {
-    if (!value) return '';
-    const [y, m, d] = value.split('-');
-    return `${d}-${m}-${y}`;
-  });
-
-  function handleChange(e) {
-    const raw = e.target.value;
-    setDisplay(raw);
-    const m1 = raw.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-    if (m1) { onChange(`${m1[3]}-${m1[2]}-${m1[1]}`); return; }
-    const m2 = raw.match(/^\d{4}-\d{2}-\d{2}$/);
-    if (m2) { onChange(raw); return; }
-    if (!raw) onChange('');
-  }
-
+function DateInput({ value, onChange, id, label }) {
   return (
     <div className="form-group" style={{ flex: 1 }}>
       {label && <label htmlFor={id} className="form-label">{label}</label>}
       <input
         id={id}
-        type="text"
+        type="date"
         className="form-input"
-        value={display}
-        onChange={handleChange}
-        placeholder={placeholder || 'DD-MM-YYYY'}
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        onClick={e => {
+          try {
+            if (e.target.showPicker) e.target.showPicker();
+          } catch (_) {}
+        }}
+        style={{ cursor: 'pointer' }}
       />
     </div>
   );
@@ -140,14 +129,12 @@ export default function AvailabilityPage() {
             label="Delivery Date *"
             value={deliveryDate}
             onChange={setDeliveryDate}
-            placeholder="DD-MM-YYYY"
           />
           <DateInput
             id="avail-returning"
             label="Returning Date (optional)"
             value={returningDate}
             onChange={setReturningDate}
-            placeholder="DD-MM-YYYY"
           />
           <div style={{ flex: '0 0 auto' }}>
             <label className="form-label">&nbsp;</label>
