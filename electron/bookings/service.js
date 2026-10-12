@@ -63,7 +63,7 @@ function createBookingsService(db) {
 
   // ─── LIST ─────────────────────────────────────────────────────────────────
   function list(session, {
-    search = '', status = '', cityId = null,
+    search = '', status = '', cityId = null, customerId = null,
     dateFrom = null, dateTo = null, limit = 200, offset = 0,
   } = {}) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
@@ -81,10 +81,11 @@ function createBookingsService(db) {
       params.push(q, q, q, q, q);
     }
 
-    if (status) { conditions.push('b.status = ?'); params.push(status); }
-    if (cityId) { conditions.push('b.city_id = ?'); params.push(cityId); }
-    if (dateFrom) { conditions.push('b.delivery_date >= ?'); params.push(dateFrom); }
-    if (dateTo)   { conditions.push('b.delivery_date <= ?'); params.push(dateTo); }
+    if (status)     { conditions.push('b.status = ?'); params.push(status); }
+    if (cityId)     { conditions.push('b.city_id = ?'); params.push(cityId); }
+    if (customerId) { conditions.push('b.customer_id = ?'); params.push(customerId); }
+    if (dateFrom)   { conditions.push('b.delivery_date >= ?'); params.push(dateFrom); }
+    if (dateTo)     { conditions.push('b.delivery_date <= ?'); params.push(dateTo); }
 
     const where = conditions.join(' AND ');
 

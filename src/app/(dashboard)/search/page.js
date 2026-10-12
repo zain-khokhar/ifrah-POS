@@ -18,17 +18,17 @@ import ReceiptModal from '@/components/ReceiptModal';
 const PAGE_SIZE = 100;
 
 const DATE_FIELD_OPTIONS = [
-  { value: 'booking_date',   label: 'Booking Date'  },
-  { value: 'delivery_date',  label: 'Delivery Date' },
-  { value: 'returning_date', label: 'Return Date'   },
+  { value: 'booking_date', label: 'Booking Date' },
+  { value: 'delivery_date', label: 'Delivery Date' },
+  { value: 'returning_date', label: 'Return Date' },
 ];
 
 function StatusBadge({ status }) {
   const map = {
-    None:    { cls: 'badge-gray',    label: 'None' },
-    Open:    { cls: 'badge-info',    label: 'Open' },
+    None: { cls: 'badge-gray', label: 'None' },
+    Open: { cls: 'badge-info', label: 'Open' },
     Pending: { cls: 'badge-warning', label: 'Pending' },
-    Closed:  { cls: 'badge-success', label: 'Closed' },
+    Closed: { cls: 'badge-success', label: 'Closed' },
   };
   const s = map[status] || map.None;
   return (
@@ -41,29 +41,29 @@ function StatusBadge({ status }) {
 export default function SearchPage() {
   const router = useRouter();
 
-  const [q,           setQ]           = useState('');
-  const [status,      setStatus]      = useState('');
-  const [month,       setMonth]       = useState('');
-  const [dateFrom,    setDateFrom]    = useState('');
-  const [dateTo,      setDateTo]      = useState('');
-  const [dateField,   setDateField]   = useState('booking_date');
-  const [cityId,      setCityId]      = useState('');
-  const [castId,      setCastId]      = useState('');
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState('');
+  const [month, setMonth] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [dateField, setDateField] = useState('booking_date');
+  const [cityId, setCityId] = useState('');
+  const [castId, setCastId] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
   const [cities, setCities] = useState([]);
-  const [casts,  setCasts]  = useState([]);
+  const [casts, setCasts] = useState([]);
 
-  const [results,  setResults]  = useState([]);
-  const [total,    setTotal]    = useState(0);
-  const [page,     setPage]     = useState(0);
-  const [loading,  setLoading]  = useState(false);
+  const [results, setResults] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [error,    setError]    = useState('');
+  const [error, setError] = useState('');
   const [printBookingId, setPrintBookingId] = useState(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
 
-  const inputRef    = useRef(null);
+  const inputRef = useRef(null);
   const searchTimer = useRef(null);
 
   // Load dropdown lists
@@ -73,8 +73,8 @@ export default function SearchPage() {
         window.electronAPI?.lists.get('cities'),
         window.electronAPI?.lists.get('casts'),
       ]);
-      if (c?.ok)  setCities(c.data  || []);
-      if (ca?.ok) setCasts(ca.data  || []);
+      if (c?.ok) setCities(c.data || []);
+      if (ca?.ok) setCasts(ca.data || []);
     }
     loadLists();
   }, []);
@@ -123,7 +123,7 @@ export default function SearchPage() {
       searchTimer.current = setTimeout(() => runSearch(0), 350);
     }
     return () => clearTimeout(searchTimer.current);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
   function clearFilters() {
@@ -131,7 +131,7 @@ export default function SearchPage() {
     setDateField('booking_date'); setCityId(''); setCastId('');
   }
 
-  const totalPages       = Math.ceil(total / PAGE_SIZE);
+  const totalPages = Math.ceil(total / PAGE_SIZE);
   const activeFilterCount = [status, month, dateFrom, dateTo, cityId, castId].filter(Boolean).length;
 
   return (
@@ -321,8 +321,8 @@ export default function SearchPage() {
               <div>
                 <label className="form-label" style={{ color: '#475569', fontWeight: 600, marginBottom: 5 }}>Status</label>
                 <select className="form-input form-select" value={status} onChange={e => setStatus(e.target.value)}>
-                  <option value="">Sab Status</option>
-                  {['None','Open','Pending','Closed'].map(s => <option key={s} value={s}>{s}</option>)}
+                  <option value="">All</option>
+                  {['None', 'Open', 'Pending', 'Closed'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
 

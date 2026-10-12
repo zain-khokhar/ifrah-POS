@@ -8,10 +8,10 @@ import {
 } from 'lucide-react';
 
 const METHOD_BADGES = {
-  cash:   { bg: '#dcfce7', color: '#16a34a', label: 'Cash' },
-  bank:   { bg: '#dbeafe', color: '#1d4ed8', label: 'Bank' },
+  cash: { bg: '#dcfce7', color: '#16a34a', label: 'Cash' },
+  bank: { bg: '#dbeafe', color: '#1d4ed8', label: 'Bank' },
   wallet: { bg: '#fef3c7', color: '#d97706', label: 'Wallet' },
-  other:  { bg: '#f1f5f9', color: '#64748b', label: 'Other' },
+  other: { bg: '#f1f5f9', color: '#64748b', label: 'Other' },
 };
 
 function MethodBadge({ method }) {
@@ -29,12 +29,12 @@ function MethodBadge({ method }) {
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState([]);
-  const [summary,  setSummary]  = useState({ total: 0, cash: 0, bank: 0, wallet: 0, depositTotal: 0 });
-  const [loading,  setLoading]  = useState(true);
-  const [search,   setSearch]   = useState('');
-  const [method,   setMethod]   = useState('');
+  const [summary, setSummary] = useState({ total: 0, cash: 0, bank: 0, wallet: 0, depositTotal: 0 });
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [method, setMethod] = useState('');
   const [dateFrom, setDateFrom] = useState('');
-  const [dateTo,   setDateTo]   = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   async function handleRefresh() {
     setLoading(true);
@@ -53,7 +53,7 @@ export default function PaymentsPage() {
       ]);
 
       if (listRes?.ok) setPayments(listRes.data || []);
-      if (sumRes?.ok)  setSummary(sumRes.data || { total: 0, cash: 0, bank: 0, wallet: 0 });
+      if (sumRes?.ok) setSummary(sumRes.data || { total: 0, cash: 0, bank: 0, wallet: 0 });
     } catch (err) {
       console.error('[PaymentsPage]', err);
     } finally {
@@ -77,7 +77,7 @@ export default function PaymentsPage() {
     ]).then(([listRes, sumRes]) => {
       if (active) {
         if (listRes?.ok) setPayments(listRes.data || []);
-        if (sumRes?.ok)  setSummary(sumRes.data || { total: 0, cash: 0, bank: 0, wallet: 0 });
+        if (sumRes?.ok) setSummary(sumRes.data || { total: 0, cash: 0, bank: 0, wallet: 0 });
         setLoading(false);
       }
     }).catch(err => {
@@ -107,9 +107,9 @@ export default function PaymentsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
           {[
             { label: 'Total Received (Rental)', value: summary.total, color: '#7c3aed', bg: '#ede9fe' },
-            { label: 'Cash Collection',        value: summary.cash,  color: '#10b981', bg: '#dcfce7' },
-            { label: 'Bank Transfer',          value: summary.bank,  color: '#3b82f6', bg: '#dbeafe' },
-            { label: 'Mobile Wallet',          value: summary.wallet,color: '#f59e0b', bg: '#fef3c7' },
+            { label: 'Cash Collection', value: summary.cash, color: '#10b981', bg: '#dcfce7' },
+            { label: 'Bank Transfer', value: summary.bank, color: '#3b82f6', bg: '#dbeafe' },
+            { label: 'Mobile Wallet', value: summary.wallet, color: '#f59e0b', bg: '#fef3c7' },
           ].map(s => (
             <div key={s.label} className="card" style={{ padding: '16px 18px' }}>
               <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
@@ -141,7 +141,7 @@ export default function PaymentsPage() {
             value={method}
             onChange={e => setMethod(e.target.value)}
           >
-            <option value="">Sab Methods</option>
+            <option value="">All</option>
             <option value="cash">Cash</option>
             <option value="bank">Bank</option>
             <option value="wallet">Wallet</option>

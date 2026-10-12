@@ -47,23 +47,27 @@ function createTrackingService(db, bookingsService, paymentsService) {
     const params = [];
 
     if (filter === 'today') {
-      conditions.push('b.delivery_date = ?');
+      conditions.push('b.delivery_date = ? AND b.delivered_on IS NULL');
       params.push(today);
     } else if (filter === 'tomorrow') {
-      conditions.push('b.delivery_date = ?');
+      conditions.push('b.delivery_date = ? AND b.delivered_on IS NULL');
       params.push(tomorrow);
+    } else if (filter === 'next2days') {
+      const next2Iso = getNext2DaysIso();
+      conditions.push('b.delivery_date >= ? AND b.delivery_date <= ? AND b.delivered_on IS NULL');
+      params.push(today, next2Iso);
     } else if (filter === 'upcoming') {
       const future = new Date();
       future.setDate(future.getDate() + 7);
       const futureIso = future.toISOString().slice(0, 10);
-      conditions.push('b.delivery_date >= ? AND b.delivery_date <= ?');
+      conditions.push('b.delivery_date >= ? AND b.delivery_date <= ? AND b.delivered_on IS NULL');
       params.push(today, futureIso);
     } else if (filter === 'pending') {
       conditions.push('b.delivered_on IS NULL');
     } else if (filter === 'delivered') {
       conditions.push('b.delivered_on IS NOT NULL');
     } else if (date) {
-      conditions.push('b.delivery_date = ?');
+      conditions.push('b.delivery_date = ? AND b.delivered_on IS NULL');
       params.push(date);
     }
 

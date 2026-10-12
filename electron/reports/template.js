@@ -62,7 +62,7 @@ function renderReportHtml({
     hour: '2-digit', minute: '2-digit', hour12: true,
   });
 
-  const isLandscape = orientation === 'landscape' || columns.length > 7;
+  const isLandscape = orientation === 'landscape' || columns.length >= 7 || reportType === 'delivery_sheet';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -182,7 +182,8 @@ function renderReportHtml({
       font-size: 10px;
       padding: 6px 8px;
       border: 1px solid #e2e8f0;
-      vertical-align: middle;
+      vertical-align: top;
+      line-height: 1.35;
     }
 
     table.report-table tbody tr:nth-child(even) {
@@ -326,11 +327,15 @@ function renderReportHtml({
             let displayVal = escapeHtml(val ?? '—');
             let alignClass = col.align === 'right' ? 'align-right' : col.align === 'center' ? 'align-center' : 'align-left';
 
-            if (col.isMoney) {
+            if (r[col.key + '_html']) {
+              displayVal = r[col.key + '_html'];
+            } else if (col.isMoney) {
               alignClass = 'align-right money-cell';
               displayVal = formatMoney(val);
             } else if (col.isNum) {
               alignClass = 'align-center';
+            } else if (typeof val === 'string' && val.includes('\n')) {
+              displayVal = escapeHtml(val).replace(/\n/g, '<br/>');
             }
 
             // Special badges
@@ -354,8 +359,11 @@ function renderReportHtml({
         <tr>
           ${columns.map((col, idx) => {
             if (idx === 0) return `<td>TOTAL / کُل (${rows.length})</td>`;
-            if (totals[col.key] !== undefined) {
-              const tVal = col.isMoney ? formatMoney(totals[col.key]) : escapeHtml(totals[col.key]);
+            if (totals[col.key + '_html']) {
+              return `<td class="${col.align === 'right' || col.isMoney ? 'align-right' : 'align-center'}">${totals[col.key + '_html']}</td>`;
+            }
+            if (totals[col.key] !== undefined && totals[col.key] !== '') {
+              const tVal = col.isMoney ? formatMoney(totals[col.key]) : escapeHtml(totals[col.key]).replace(/\n/g, '<br/>');
               return `<td class="${col.isMoney ? 'align-right money-cell' : 'align-center'}">${tVal}</td>`;
             }
             return `<td></td>`;

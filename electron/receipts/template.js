@@ -571,14 +571,10 @@ ${isThermal ? `
     </div>` : ''}
     ${booking.city || booking.cast ? `
     <div class="meta-row">
-      <span class="meta-label">City / Cast:</span>
-      <span class="meta-val">${escapeHtml([booking.city, booking.cast].filter(Boolean).join(' • '))}</span>
+      <span class="meta-label">City:</span>
+      <span class="meta-val">${escapeHtml([booking.city].filter(Boolean).join(' • '))}</span>
     </div>` : ''}
-    ${booking.relative_name ? `
-    <div class="meta-row">
-      <span class="meta-label">Relative:</span>
-      <span class="meta-val">${escapeHtml(booking.relative_name)} (${escapeHtml(booking.relative_relation || booking.customer_relation_type || 'Relative')})</span>
-    </div>` : ''}
+  
   </div>
 
   <div class="thermal-divider"></div>
@@ -708,24 +704,6 @@ ${isThermal ? `
         <span class="meta-label">Phone Number:</span>
         <span class="meta-val">${escapeHtml(booking.customer_phone || '-')}</span>
       </div>
-      ${booking.customer_phone2 ? `
-      <div class="meta-row">
-        <span class="meta-label">Secondary Phone:</span>
-        <span class="meta-val">${escapeHtml(booking.customer_phone2)}</span>
-      </div>` : ''}
-      <div class="meta-row">
-        <span class="meta-label">CNIC Number:</span>
-        <span class="meta-val">${escapeHtml(booking.customer_cnic || '-')}</span>
-      </div>
-      <div class="meta-row">
-        <span class="meta-label">City / Biradari:</span>
-        <span class="meta-val">${escapeHtml([booking.city, booking.cast].filter(Boolean).join(' • ') || '-')}</span>
-      </div>
-      ${booking.relative_name ? `
-      <div class="meta-row">
-        <span class="meta-label">Relative Name:</span>
-        <span class="meta-val">${escapeHtml(booking.relative_name)} (${escapeHtml(booking.relative_relation || booking.customer_relation_type || 'Relative')})</span>
-      </div>` : ''}
     </div>
 
     <div class="info-card">
@@ -859,7 +837,7 @@ ${isThermal ? `
       <strong>Terms & Conditions:</strong> ${escapeHtml(footerEn)}
     </div>
     <div style="margin-top: 10px; font-size: 10px; color: #94a3b8; text-align: center;">
-      Printed on ${escapeHtml(printTimestamp)} • Operator: ${escapeHtml(printedBy)} • System: Ifrah POS
+      Printed on ${escapeHtml(printTimestamp)} 
     </div>
   </div>
 `}

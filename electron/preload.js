@@ -62,6 +62,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     create:        (input)     => ipcRenderer.invoke('customers:create', input),
     update:        (id, input) => ipcRenderer.invoke('customers:update', id, input),
     delete:        (id)        => ipcRenderer.invoke('customers:delete', id),
+    bookings:      (id)        => ipcRenderer.invoke('customers:bookings', id),
+    history:       (id)        => ipcRenderer.invoke('customers:history', id),
   },
 
   // ── Dresses ───────────────────────────────────────────────────────────────

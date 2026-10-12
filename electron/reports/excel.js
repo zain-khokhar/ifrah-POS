@@ -93,7 +93,7 @@ async function buildExcelReport({ title, subtitle = '', columns, rows, totals = 
   headerRow.eachCell((cell) => {
     cell.fill = HEADER_FILL;
     cell.font = HEADER_FONT;
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
   });
 
   // 2. Add Data Rows
@@ -117,7 +117,16 @@ async function buildExcelReport({ title, subtitle = '', columns, rows, totals = 
     });
 
     const addedRow = sheet.addRow(rowValues);
-    addedRow.height = 22;
+    let maxLines = 1;
+    columns.forEach(col => {
+      const val = rowValues[col.key];
+      if (typeof val === 'string') {
+        const lines = val.split('\n').length;
+        if (lines > maxLines) maxLines = lines;
+      }
+    });
+    addedRow.height = Math.max(22, Math.min(120, maxLines * 18));
+
     addedRow.eachCell((cell, colNumber) => {
       cell.font = ROW_FONT;
       cell.border = THIN_BORDER;
@@ -125,15 +134,23 @@ async function buildExcelReport({ title, subtitle = '', columns, rows, totals = 
 
       if (colDef?.isMoney) {
         cell.numFmt = '#,##0';
-        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.alignment = { vertical: 'top', horizontal: 'right', wrapText: true };
       } else if (colDef?.isNum) {
         cell.numFmt = '#,##0';
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.alignment = { vertical: 'top', horizontal: 'center', wrapText: true };
       } else if (colDef?.isText || colDef?.key.includes('phone') || colDef?.key.includes('cnic')) {
         cell.numFmt = '@'; // Force text format
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.alignment = {
+          vertical: 'top',
+          horizontal: colDef?.align === 'right' ? 'right' : colDef?.align === 'center' ? 'center' : 'left',
+          wrapText: true,
+        };
       } else {
-        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        cell.alignment = {
+          vertical: 'top',
+          horizontal: colDef?.align === 'right' ? 'right' : colDef?.align === 'center' ? 'center' : 'left',
+          wrapText: true,
+        };
       }
     });
   });
@@ -153,7 +170,16 @@ async function buildExcelReport({ title, subtitle = '', columns, rows, totals = 
     });
 
     const addedTotalsRow = sheet.addRow(totalsRowValues);
-    addedTotalsRow.height = 26;
+    let maxTotLines = 1;
+    columns.forEach(col => {
+      const val = totalsRowValues[col.key];
+      if (typeof val === 'string') {
+        const lines = val.split('\n').length;
+        if (lines > maxTotLines) maxTotLines = lines;
+      }
+    });
+    addedTotalsRow.height = Math.max(26, Math.min(80, maxTotLines * 18));
+
     addedTotalsRow.eachCell((cell, colNumber) => {
       cell.font = TOTAL_FONT;
       cell.border = TOTAL_BORDER;
@@ -165,11 +191,15 @@ async function buildExcelReport({ title, subtitle = '', columns, rows, totals = 
       const colDef = columns[colNumber - 1];
       if (colDef?.isMoney) {
         cell.numFmt = '#,##0';
-        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.alignment = { vertical: 'top', horizontal: 'right', wrapText: true };
       } else if (colNumber === 1) {
-        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        cell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
       } else {
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.alignment = {
+          vertical: 'top',
+          horizontal: colDef?.align === 'right' ? 'right' : colDef?.align === 'center' ? 'center' : 'left',
+          wrapText: true,
+        };
       }
     });
   }

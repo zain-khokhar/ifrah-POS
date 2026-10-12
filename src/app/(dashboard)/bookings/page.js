@@ -94,7 +94,7 @@ export default function BookingsPage() {
               value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <select className="form-input form-select" style={{ width: 140 }} value={status} onChange={e => setStatus(e.target.value)}>
-            <option value="">Sab Status</option>
+            <option value="">All</option>
             <option value="None">None</option>
             <option value="Open">Open</option>
             <option value="Pending">Pending</option>
@@ -210,7 +210,7 @@ export default function BookingsPage() {
                         </button>
                         {!isViewer && (
                           <Link href={`/bookings/new?id=${b.id}`} className="btn btn-secondary btn-sm">
-                            <Edit size={11} /> Edit
+                            <Edit size={11} />
                           </Link>
                         )}
                         {isOwner && (

@@ -60,31 +60,106 @@ function createReportsService(db, settingsService) {
     return Math.max(0, diff);
   }
 
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   // ─── 1. DELIVERY SHEET ────────────────────────────────────────────────────
-  function getDeliverySheet(session, { range = 'today', dateFrom = null, dateTo = null, cityId = null } = {}) {
+  function getDeliverySheet(session, {
+    range = 'today',
+    filter = null,
+    search = '',
+    excludeDelivered = false,
+    dateFrom = null,
+    dateTo = null,
+    cityId = null,
+  } = {}) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
 
+    const activeFilter = filter || range || 'today';
     const today = getTodayIso();
     let startDate = today;
     let endDate = today;
+    let subtitle = `Deliveries scheduled for ${today}`;
+    let filtersSummary = `Date: ${today}`;
 
-    if (range === 'tomorrow') {
+    const conditions = ['b.deleted_at IS NULL'];
+    const params = [];
+
+    if (activeFilter === 'tomorrow') {
       startDate = getTomorrowIso();
       endDate = startDate;
-    } else if (range === 'next2days') {
+      conditions.push('b.delivery_date = ?');
+      params.push(startDate);
+      subtitle = `Deliveries scheduled for tomorrow (${startDate})`;
+      filtersSummary = `Tomorrow: ${startDate}`;
+    } else if (activeFilter === 'next2days') {
       startDate = today;
       endDate = getNext2DaysIso();
-    } else if (range === 'custom' && dateFrom) {
+      conditions.push('b.delivery_date >= ? AND b.delivery_date <= ?');
+      params.push(startDate, endDate);
+      subtitle = `Deliveries scheduled from ${startDate} to ${endDate}`;
+      filtersSummary = `Next 2 Days: ${startDate} to ${endDate}`;
+    } else if (activeFilter === 'upcoming') {
+      const future = new Date();
+      future.setDate(future.getDate() + 7);
+      startDate = today;
+      endDate = future.toISOString().slice(0, 10);
+      conditions.push('b.delivery_date >= ? AND b.delivery_date <= ?');
+      params.push(startDate, endDate);
+      subtitle = `Deliveries scheduled from ${startDate} to ${endDate}`;
+      filtersSummary = `Next 7 Days: ${startDate} to ${endDate}`;
+    } else if ((activeFilter === 'custom' || range === 'custom') && dateFrom) {
       startDate = dateFrom;
       endDate = dateTo || dateFrom;
+      conditions.push('b.delivery_date >= ? AND b.delivery_date <= ?');
+      params.push(startDate, endDate);
+      subtitle = `Deliveries scheduled from ${startDate} to ${endDate}`;
+      filtersSummary = `Range: ${startDate} to ${endDate}`;
+    } else if (activeFilter === 'pending') {
+      conditions.push('b.delivered_on IS NULL');
+      subtitle = 'All Pending Deliveries (تمام غیر مکمل شدہ ڈلیوریز)';
+      filtersSummary = 'Status: Pending';
+    } else if (activeFilter === 'delivered') {
+      conditions.push('b.delivered_on IS NOT NULL');
+      subtitle = 'Delivered Bookings Record (مکمل شدہ ڈلیوری ریکارڈ)';
+      filtersSummary = 'Status: Delivered';
+    } else if (activeFilter === 'all') {
+      subtitle = 'All Deliveries Record (تمام ڈلیوری ریکارڈ)';
+      filtersSummary = 'Status: All (Sabhi)';
+    } else {
+      // today or default
+      startDate = today;
+      endDate = today;
+      conditions.push('b.delivery_date >= ? AND b.delivery_date <= ?');
+      params.push(startDate, endDate);
+      subtitle = `Deliveries scheduled for ${today}`;
+      filtersSummary = `Today: ${today}`;
     }
 
-    const conditions = ['b.deleted_at IS NULL', 'b.delivery_date >= ?', 'b.delivery_date <= ?'];
-    const params = [startDate, endDate];
+    if (excludeDelivered && activeFilter !== 'delivered' && activeFilter !== 'pending') {
+      conditions.push('b.delivered_on IS NULL');
+    }
 
     if (cityId) {
       conditions.push('b.city_id = ?');
       params.push(cityId);
+    }
+
+    if (search && search.trim()) {
+      const q = `%${search.trim()}%`;
+      conditions.push(`(
+        CAST(b.booking_no AS TEXT) LIKE ?
+        OR cu.name LIKE ? OR cu.phone LIKE ? OR cu.cnic LIKE ?
+      )`);
+      params.push(q, q, q, q);
+      filtersSummary += ` • Search: "${search.trim()}"`;
     }
 
     const where = conditions.join(' AND ');
@@ -118,6 +193,12 @@ function createReportsService(db, settingsService) {
 
     const enrichedRows = rows.map(r => {
       const items = getItems.all(r.id);
+      const isDelivered = Boolean(r.delivered_on);
+      const remainingDue = Number(r.remaining || 0);
+      const grandTotalNum = Number(r.grand_total || 0);
+      const secDepositNum = Number(r.security_deposit || 0);
+
+      // Legacy string
       const itemsDetail = items.map(it => {
         const acc = [];
         if (it.jewellery) acc.push('Jewellery');
@@ -129,12 +210,125 @@ function createReportsService(db, settingsService) {
         return `${it.dress_name_snapshot}${it.size ? ` (${it.size})` : ''}${accStr}`;
       }).join(' • ');
 
+      // Plain text representations for Excel
+      const bookingDisplayText = `#${r.booking_no}${r.status ? `\n${r.status}` : ''}`;
+      const customerDisplayText = [r.customer_name, r.customer_phone, r.city].filter(Boolean).join('\n');
+      const deliveryDateDisplayText = `${r.delivery_date}${r.delivered_on ? `\nDelivered: ${r.delivered_on}` : ''}`;
+      const returnDateDisplayText = r.returning_date || '—';
+
+      const itemsTextList = items.map(it => {
+        const checkMark = it.is_ready ? '☑' : '☐';
+        const sizeStr = it.size ? ` (${it.size})` : '';
+        const readyTag = it.is_ready ? ' [Ready]' : '';
+        const acc = [];
+        if (it.jewellery) acc.push('Jewellery');
+        if (it.clutch_purse) acc.push('Purse');
+        if (it.hand_bag) acc.push('Bag');
+        if (it.double_dupatta) acc.push('2x Dupatta');
+        if (it.shoes) acc.push('Shoes');
+        const accStr = acc.length > 0 ? ` [${acc.join(', ')}]` : '';
+        return `${checkMark} ${it.dress_name_snapshot}${sizeStr}${accStr}${readyTag}`;
+      }).join('\n');
+
+      const dressesPrepDisplayText = [
+        itemsTextList || r.dresses_summary || 'Koi dress nahi',
+        r.delivery_note ? `Note: ${r.delivery_note}` : ''
+      ].filter(Boolean).join('\n');
+
+      const paymentDueDisplayText = [
+        remainingDue > 0 ? `Due: Rs. ${remainingDue.toLocaleString()}` : 'Fully Paid ✓',
+        `Total: Rs. ${grandTotalNum.toLocaleString()}`,
+        secDepositNum > 0 ? `Deposit: Rs. ${secDepositNum.toLocaleString()}` : ''
+      ].filter(Boolean).join('\n');
+
+      const statusDisplayText = isDelivered ? 'Delivered' : 'Pending';
+
+      // HTML representations for PDF
+      const bookingDisplayHtml = `
+        <div style="font-family: monospace; font-weight: 800; color: #6d28d9; font-size: 11.5px;">#${escapeHtml(r.booking_no)}</div>
+        ${r.status ? `<div style="font-size: 9px; color: #64748b; margin-top: 1px;">${escapeHtml(r.status)}</div>` : ''}
+      `;
+
+      const customerDisplayHtml = `
+        <div style="font-weight: 700; color: #0f172a; font-size: 10.5px;">${escapeHtml(r.customer_name || '—')}</div>
+        ${r.customer_phone ? `<div style="font-family: monospace; font-size: 9.5px; color: #475569; margin-top: 1px;">📞 ${escapeHtml(r.customer_phone)}</div>` : ''}
+        ${r.city ? `<div style="font-size: 9px; color: #64748b; margin-top: 1px;">${escapeHtml(r.city)}</div>` : ''}
+      `;
+
+      const deliveryDateDisplayHtml = `
+        <div style="font-weight: 600; color: #1e293b; font-size: 10.5px;">${escapeHtml(r.delivery_date || '—')}</div>
+        ${r.delivered_on ? `<div style="font-size: 8.5px; color: #16a34a; font-weight: 600; margin-top: 2px;">✓ Delivered: ${escapeHtml(r.delivered_on)}</div>` : ''}
+      `;
+
+      const returningDateHtml = `
+        <div style="color: #334155; font-size: 10.5px;">${escapeHtml(r.returning_date || '—')}</div>
+      `;
+
+      const dressesPrepHtml = `
+        <div>
+          ${items.length > 0 ? items.map(it => {
+            const isReady = Boolean(it.is_ready);
+            const checkIcon = isReady ? '☑' : '☐';
+            const sizeStr = it.size ? ` (${escapeHtml(it.size)})` : '';
+            const acc = [];
+            if (it.jewellery) acc.push('Jewellery');
+            if (it.clutch_purse) acc.push('Purse');
+            if (it.hand_bag) acc.push('Bag');
+            if (it.double_dupatta) acc.push('2x Dupatta');
+            if (it.shoes) acc.push('Shoes');
+            const accStr = acc.length > 0 ? ` <span style="font-size: 8.5px; color: #64748b;">[${escapeHtml(acc.join(', '))}]</span>` : '';
+            const readyBadge = isReady ? ` <span style="font-size: 8.5px; font-weight: 700; color: #059669; background: #d1fae5; padding: 1px 5px; border-radius: 4px;">Ready</span>` : '';
+            return `<div style="margin-bottom: 2px; font-size: 9.5px; line-height: 1.3;">
+              <span style="font-size: 10px; color: ${isReady ? '#059669' : '#64748b'};">${checkIcon}</span>
+              <span style="font-weight: ${isReady ? '700' : '500'}; color: ${isReady ? '#065f46' : '#1e293b'};">${escapeHtml(it.dress_name_snapshot)}${sizeStr}${accStr}${readyBadge}</span>
+            </div>`;
+          }).join('') : `<span style="color: #64748b; font-size: 9.5px;">${escapeHtml(r.dresses_summary || 'Koi dress nahi')}</span>`}
+          ${r.delivery_note ? `<div style="font-size: 8.5px; color: #64748b; font-style: italic; margin-top: 2px;">Note: ${escapeHtml(r.delivery_note)}</div>` : ''}
+        </div>
+      `;
+
+      const paymentDueDisplayHtml = `
+        <div style="text-align: right;">
+          <div style="font-weight: 800; font-size: 11px; color: ${remainingDue > 0 ? '#dc2626' : '#16a34a'};">
+            ${remainingDue > 0 ? `Rs. ${remainingDue.toLocaleString()}` : 'Fully Paid ✓'}
+          </div>
+          <div style="font-size: 9px; color: #64748b; margin-top: 1px;">
+            Total: Rs. ${grandTotalNum.toLocaleString()}
+          </div>
+          ${secDepositNum > 0 ? `<div style="font-size: 8.5px; color: #7c3aed; margin-top: 1px;">Deposit: Rs. ${secDepositNum.toLocaleString()}</div>` : ''}
+        </div>
+      `;
+
+      const statusDisplayHtml = `
+        <span class="badge-status ${isDelivered ? 'badge-closed' : 'badge-pending'}">
+          ${isDelivered ? 'Delivered' : 'Pending'}
+        </span>
+      `;
+
       return {
         ...r,
         items,
         dresses_detailed: itemsDetail || r.dresses_summary || '—',
         relative_info: r.relative_name ? `${r.relative_name} (${r.relation_type || 'Relative'})` : '—',
         is_delivered_text: r.delivered_on ? `Yes (${r.delivered_on})` : 'Pending',
+
+        // Field keys matching the exact 7 UI columns
+        booking_display: bookingDisplayText,
+        customer_display: customerDisplayText,
+        delivery_date_display: deliveryDateDisplayText,
+        returning_date: returnDateDisplayText,
+        dresses_prep_display: dressesPrepDisplayText,
+        payment_due_display: paymentDueDisplayText,
+        status_display: statusDisplayText,
+
+        // HTML versions for PDF
+        booking_display_html: bookingDisplayHtml,
+        customer_display_html: customerDisplayHtml,
+        delivery_date_display_html: deliveryDateDisplayHtml,
+        returning_date_html: returningDateHtml,
+        dresses_prep_display_html: dressesPrepHtml,
+        payment_due_display_html: paymentDueDisplayHtml,
+        status_display_html: statusDisplayHtml,
       };
     });
 
@@ -145,23 +339,32 @@ function createReportsService(db, settingsService) {
     return {
       reportType: 'delivery_sheet',
       title: 'Daily Delivery Sheet (ڈلیوری شیٹ)',
-      subtitle: `Deliveries scheduled from ${startDate} to ${endDate}`,
-      filtersSummary: `Range: ${startDate} to ${endDate}`,
+      subtitle,
+      filtersSummary,
+      orientation: 'landscape',
       columns: [
-        { header: 'Booking #', key: 'booking_no', isNum: true, width: 12 },
-        { header: 'Delivery Date', key: 'delivery_date', width: 14 },
-        { header: 'Customer Name', key: 'customer_name', width: 22 },
-        { header: 'Phone', key: 'customer_phone', isText: true, width: 16 },
-        { header: 'City', key: 'city', width: 14 },
-        { header: 'Dresses & Accessories', key: 'dresses_detailed', width: 36 },
-        { header: 'Grand Total', key: 'grand_total', isMoney: true, width: 15 },
-        { header: 'Paid', key: 'amount_paid', isMoney: true, width: 15 },
-        { header: 'Remaining Due', key: 'remaining', isMoney: true, width: 15 },
-        { header: 'Delivered', key: 'is_delivered_text', width: 14 },
+        { header: 'BOOKING #', key: 'booking_display', width: 14, align: 'center', isText: true },
+        { header: 'CUSTOMER', key: 'customer_display', width: 28, align: 'left', isText: true },
+        { header: 'DELIVERY DATE', key: 'delivery_date_display', width: 16, align: 'center', isText: true },
+        { header: 'RETURN DATE', key: 'returning_date', width: 16, align: 'center', isText: true },
+        { header: 'DRESSES & PREPARATION (NIGHT-BEFORE READY)', key: 'dresses_prep_display', width: 44, align: 'left', isText: true },
+        { header: 'PAYMENT DUE', key: 'payment_due_display', width: 22, align: 'right', isText: true },
+        { header: 'STATUS', key: 'status_display', width: 14, align: 'center', isText: true },
       ],
       rows: enrichedRows,
       totals: {
+        booking_display: `${enrichedRows.length} Bookings`,
+        customer_display: '',
+        delivery_date_display: '',
+        returning_date: '',
+        dresses_prep_display: '',
+        payment_due_display: `Remaining: Rs. ${totalRemaining.toLocaleString()}\nTotal: Rs. ${totalGrand.toLocaleString()}`,
+        payment_due_display_html: `<div style="text-align: right;"><div style="font-weight: 800; color: ${totalRemaining > 0 ? '#dc2626' : '#16a34a'};">Due: Rs. ${totalRemaining.toLocaleString()}</div><div style="font-size: 9.5px; color: #64748b;">Total: Rs. ${totalGrand.toLocaleString()}</div></div>`,
+        status_display: '',
+
+        // Preserved for tests and reports
         booking_no: `${enrichedRows.length} Bookings`,
+        total_items: enrichedRows.reduce((sum, r) => sum + (r.items ? r.items.length : 1), 0),
         grand_total: totalGrand,
         amount_paid: totalPaid,
         remaining: totalRemaining,
@@ -1021,7 +1224,7 @@ function createReportsService(db, settingsService) {
           const pdfBuffer = await win.webContents.printToPDF({
             printBackground: true,
             pageSize: 'A4',
-            landscape: reportData.columns?.length > 7,
+            landscape: reportData.columns?.length >= 7 || reportData.orientation === 'landscape' || reportType === 'delivery_sheet',
             margins: { marginType: 'none' },
           });
           try { win.destroy(); win = null; } catch { }
