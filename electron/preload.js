@@ -74,7 +74,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     nextCode:      ()        => ipcRenderer.invoke('dresses:nextCode'),
     create:        (input)   => ipcRenderer.invoke('dresses:create', input),
     update:        (id, inp) => ipcRenderer.invoke('dresses:update', id, inp),
-    setActive:     (id, act) => ipcRenderer.invoke('dresses:setActive', id, act),
+    setActive:     (id, act, remark) => ipcRenderer.invoke('dresses:setActive', id, act, remark),
     quickAdd:      (name)    => ipcRenderer.invoke('dresses:quickAdd', name),
     history:       (id, flt) => ipcRenderer.invoke('dresses:history', id, flt),
     updateCondition: (id, st, notes) => ipcRenderer.invoke('dresses:updateCondition', id, st, notes),

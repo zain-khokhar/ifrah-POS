@@ -27,7 +27,7 @@ function createDressesService(db, app) {
   }
 
   // ─── LIST ────────────────────────────────────────────────────────────────
-  function list(session, { search = '', categoryId = null, activeOnly = false, conditionStatus = null } = {}) {
+  function list(session, { search = '', categoryId = null, activeOnly = false, inactiveOnly = false, conditionStatus = null } = {}) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
 
     const conditions = ['d.deleted_at IS NULL'];
@@ -40,6 +40,7 @@ function createDressesService(db, app) {
     }
     if (categoryId) { conditions.push('d.category_id = ?'); params.push(categoryId); }
     if (activeOnly) { conditions.push('d.active = 1'); }
+    if (inactiveOnly) { conditions.push('d.active = 0'); }
     if (conditionStatus) { conditions.push('d.condition_status = ?'); params.push(conditionStatus); }
 
     const where = conditions.join(' AND ');
@@ -47,7 +48,7 @@ function createDressesService(db, app) {
     return db.prepare(`
       SELECT
         d.id, d.code, d.name, d.size, d.rental_price, d.description,
-        d.photo_path, d.active,
+        d.photo_path, d.active, d.inactive_remark, d.inactive_at,
         COALESCE(d.condition_status, 'fresh') AS condition_status,
         d.attachments,
         d.category_id, dc.name AS category,
@@ -312,16 +313,20 @@ function createDressesService(db, app) {
   }
 
   // ─── TOGGLE ACTIVE (deactivate / reactivate) ─────────────────────────────
-  function setActive(session, id, active) {
+  function setActive(session, id, active, remark = '') {
     const user = requireRole(session, [ROLES.OWNER]);
     const action = active ? 'dress.activate' : 'dress.deactivate';
+    const note = String(remark || '').trim();
+    if (!active && !note) throw new Error('Dress inactive karne ke liye Remark likhna lazmi hai.');
     withAudit(db, user, action, 'dresses', id,
-      { newValues: { active: active ? 1 : 0 } },
+      { newValues: { active: active ? 1 : 0, inactive_remark: active ? null : note } },
       () => db.prepare(
         `UPDATE dresses SET active = ?,
+         inactive_remark = ?,
+         inactive_at = ?,
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
          WHERE id = ? AND deleted_at IS NULL`
-      ).run(active ? 1 : 0, id)
+      ).run(active ? 1 : 0, active ? null : note, active ? null : new Date().toISOString().slice(0, 10), id)
     );
     return { ok: true };
   }

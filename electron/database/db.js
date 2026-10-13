@@ -175,6 +175,12 @@ function runMigrations(db) {
   if (tableInfo('booking_items').length > 0 && !hasCol('booking_items', 'item_condition')) {
     try { db.exec(`ALTER TABLE booking_items ADD COLUMN item_condition TEXT DEFAULT 'OK';`); } catch {}
   }
+  if (tableInfo('booking_items').length > 0 && !hasCol('booking_items', 'return_note')) {
+    try { db.exec(`ALTER TABLE booking_items ADD COLUMN return_note TEXT;`); } catch {}
+  }
+  if (tableInfo('booking_items').length > 0 && !hasCol('booking_items', 'return_qty')) {
+    try { db.exec(`ALTER TABLE booking_items ADD COLUMN return_qty INTEGER;`); } catch {}
+  }
 
   // Dress condition & attachments migration
   if (tableInfo('dresses').length > 0) {
@@ -183,6 +189,12 @@ function runMigrations(db) {
     }
     if (!hasCol('dresses', 'attachments')) {
       try { db.exec(`ALTER TABLE dresses ADD COLUMN attachments TEXT DEFAULT NULL;`); } catch {}
+    }
+    if (!hasCol('dresses', 'inactive_remark')) {
+      try { db.exec(`ALTER TABLE dresses ADD COLUMN inactive_remark TEXT;`); } catch {}
+    }
+    if (!hasCol('dresses', 'inactive_at')) {
+      try { db.exec(`ALTER TABLE dresses ADD COLUMN inactive_at TEXT;`); } catch {}
     }
   }
 

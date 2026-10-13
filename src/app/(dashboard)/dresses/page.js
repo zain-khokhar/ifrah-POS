@@ -8,6 +8,78 @@ import {
 } from 'lucide-react';
 import ReceiptModal from '@/components/ReceiptModal';
 
+// ─── Three-dots Action Menu (fixed-position so table overflow can't clip it) ─
+function ActionMenu({ items }) {
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+
+  useEffect(() => {
+    if (!pos) return;
+    const close = () => setPos(null);
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [pos]);
+
+  function toggle(e) {
+    e.stopPropagation();
+    if (pos) return setPos(null);
+    const r = btnRef.current.getBoundingClientRect();
+    const menuH = items.length * 36 + 8;
+    const top = r.bottom + menuH > window.innerHeight ? r.top - menuH - 4 : r.bottom + 4;
+    setPos({ top, left: Math.max(8, r.right - 160) });
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className="btn btn-secondary btn-sm"
+        onClick={toggle}
+        title="Actions"
+        style={{ padding: '4px 8px', fontSize: 16, fontWeight: 800, lineHeight: 1 }}
+      >
+        ⋮
+      </button>
+      {pos && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'fixed', top: pos.top, left: pos.left, width: 160, zIndex: 2000,
+            background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.15)', padding: 4,
+          }}
+        >
+          {items.map(it => (
+            <button
+              key={it.key}
+              type="button"
+              disabled={it.disabled}
+              onClick={() => { setPos(null); it.onClick(); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: 36,
+                padding: '0 10px', border: 'none', background: 'transparent', borderRadius: 6,
+                cursor: it.disabled ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600,
+                color: it.color || '#1e293b', textAlign: 'left',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              {it.icon} {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── Status Badge ────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
   const map = {
@@ -912,10 +984,16 @@ export default function DressesPage() {
   const [categoryId,      setCategoryId]      = useState('');
   const [conditionFilter, setConditionFilter] = useState('');
   const [activeOnly,      setActiveOnly]      = useState(false);
+  const [inactiveOnly,    setInactiveOnly]    = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState(null);
+  const [deactivateRemark, setDeactivateRemark] = useState('');
+  const [deactivating,     setDeactivating]     = useState(false);
+  const [remarkDress,      setRemarkDress]      = useState(null);
   const [categories,      setCategories]      = useState([]);
   const [modal,           setModal]           = useState(null);
   const [userRole,        setUserRole]        = useState('viewer');
   const [togglingId,      setTogglingId]      = useState(null);
+  const [exporting,        setExporting]        = useState(false);
 
   // History & Receipt Modal state
   const [historyDress, setHistoryDress] = useState(null);
@@ -936,6 +1014,7 @@ export default function DressesPage() {
         search,
         categoryId: categoryId || null,
         activeOnly,
+        inactiveOnly,
         conditionStatus: conditionFilter || null,
       });
       if (res?.ok) setDresses(res.data || []);
@@ -943,13 +1022,57 @@ export default function DressesPage() {
     }
     reloadRef.current = fetchDresses;
     fetchDresses();
-  }, [search, categoryId, conditionFilter, activeOnly]);
+  }, [search, categoryId, conditionFilter, activeOnly, inactiveOnly]);
 
   async function toggleActive(dress) {
+    if (dress.active) {
+      setDeactivateRemark('');
+      setDeactivateTarget(dress);
+      return;
+    }
     setTogglingId(dress.id);
-    await window.electronAPI?.dresses.setActive(dress.id, !dress.active);
+    await window.electronAPI?.dresses.setActive(dress.id, true);
     if (reloadRef.current) reloadRef.current();
     setTogglingId(null);
+  }
+
+  async function confirmDeactivate() {
+    if (!deactivateTarget || !deactivateRemark.trim()) return;
+    setDeactivating(true);
+    const res = await window.electronAPI?.dresses.setActive(deactivateTarget.id, false, deactivateRemark.trim());
+    setDeactivating(false);
+    if (res?.ok) {
+      setDeactivateTarget(null);
+      if (reloadRef.current) reloadRef.current();
+    } else {
+      alert(res?.message || 'Inactive nahi ho saka.');
+    }
+  }
+
+  async function handleExport(kind) {
+    setExporting(kind);
+    try {
+      const filters = {
+        search,
+        categoryId: categoryId || null,
+        activeOnly,
+        inactiveOnly,
+        conditionStatus: conditionFilter || null,
+      };
+      const api = window.electronAPI?.reports;
+      const res = kind === 'pdf'
+        ? await api?.exportPdf({ reportType: 'dress_catalogue', filters })
+        : await api?.exportExcel({ reportType: 'dress_catalogue', filters });
+      if (res?.ok && !res.canceled) {
+        alert(`✓ Dress Catalogue ${kind === 'pdf' ? 'PDF' : 'Excel'} saved: ${res.filePath}`);
+      } else if (!res?.canceled && res?.message) {
+        alert(res.message);
+      }
+    } catch (err) {
+      alert(`Export failed: ${err.message}`);
+    } finally {
+      setExporting(false);
+    }
   }
 
   const isOwner  = userRole === 'owner';
@@ -967,11 +1090,22 @@ export default function DressesPage() {
             {loading ? 'Loading…' : `${active} active, ${inactive} inactive dresses mojood hain`}
           </p>
         </div>
-        {!isViewer && (
-          <button className="btn btn-primary" onClick={() => setModal('new')}>
-            <Plus size={15} /> Add Dress
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => reloadRef.current?.()} title="Refresh Karein" style={{ gap: 5 }}>
+            <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Refresh
           </button>
-        )}
+          <button className="btn btn-secondary btn-sm" onClick={() => handleExport('pdf')} disabled={!!exporting} title="Current filters ke hisab se PDF" style={{ gap: 6, fontWeight: 600, color: '#0f172a' }}>
+            <FileText size={13} style={{ color: '#7c3aed' }} /> {exporting === 'pdf' ? 'Exporting...' : 'Export to PDF'}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => handleExport('excel')} disabled={!!exporting} title="Current filters ke hisab se Excel" style={{ gap: 6, fontWeight: 600, color: '#0f172a' }}>
+            <Upload size={13} style={{ color: '#10b981' }} /> {exporting === 'excel' ? 'Exporting...' : 'Export to Excel'}
+          </button>
+          {!isViewer && (
+            <button className="btn btn-primary" onClick={() => setModal('new')}>
+              <Plus size={15} /> Add Dress
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ─── Page Body (Full Width) ────────────────────────────────── */}
@@ -1001,11 +1135,15 @@ export default function DressesPage() {
             <option value="need_repair">⚠️ Need Repair</option>
           </select>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13.5, color: '#64748b', whiteSpace: 'nowrap', fontWeight: 500 }}>
-            <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} style={{ width: 14, height: 14, accentColor: '#7c3aed' }} />
+            <input type="checkbox" checked={activeOnly} onChange={e => { setActiveOnly(e.target.checked); if (e.target.checked) setInactiveOnly(false); }} style={{ width: 14, height: 14, accentColor: '#7c3aed' }} />
             Active only
           </label>
-          {(search || categoryId || conditionFilter || activeOnly) && (
-            <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setCategoryId(''); setConditionFilter(''); setActiveOnly(false); }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13.5, color: '#64748b', whiteSpace: 'nowrap', fontWeight: 500 }}>
+            <input type="checkbox" checked={inactiveOnly} onChange={e => { setInactiveOnly(e.target.checked); if (e.target.checked) setActiveOnly(false); }} style={{ width: 14, height: 14, accentColor: '#ef4444' }} />
+            Inactive only
+          </label>
+          {(search || categoryId || conditionFilter || activeOnly || inactiveOnly) && (
+            <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setCategoryId(''); setConditionFilter(''); setActiveOnly(false); setInactiveOnly(false); }}>
               <X size={12} /> Clear
             </button>
           )}
@@ -1105,7 +1243,11 @@ export default function DressesPage() {
                         </td>
 
                         {/* Condition Status */}
-                        <td>
+                        <td
+                          onClick={!isViewer ? (e => { e.stopPropagation(); setModal(d); }) : undefined}
+                          style={!isViewer ? { cursor: 'pointer' } : undefined}
+                          title={!isViewer ? 'Condition update karne ke liye click karein' : undefined}
+                        >
                           <ConditionBadge status={d.condition_status} />
                         </td>
 
@@ -1142,79 +1284,52 @@ export default function DressesPage() {
                           <span className={`badge ${d.active ? 'badge-success' : 'badge-danger'}`}>
                             {d.active ? 'Active' : 'Inactive'}
                           </span>
+                          {!d.active && d.inactive_remark && (
+                            <div
+                              title={d.inactive_remark}
+                              onClick={() => setRemarkDress(d)}
+                              style={{ fontSize: 11, color: '#b91c1c', marginTop: 3, maxWidth: 170, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            >
+                              Remark: {d.inactive_remark}
+                            </div>
+                          )}
                         </td>
 
                         {/* Actions */}
                         <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                           <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                            {/* Mark Ready Button if in need_dry_clean / need_repair */}
-                            {!isViewer && needsService && (
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                style={{
-                                  color: '#15803d',
-                                  borderColor: '#bbf7d0',
-                                  background: '#f0fdf4',
-                                  fontWeight: 700,
-                                  fontSize: 11.5,
-                                  padding: '3px 8px',
-                                }}
-                                onClick={async () => {
-                                  const res = await window.electronAPI?.dresses.updateCondition(d.id, 'good', 'Marked ready from catalogue');
-                                  if (res?.ok && reloadRef.current) reloadRef.current();
-                                }}
-                                title="Dress tayar hai (Mark as Good/Fresh)"
-                              >
-                                <Check size={12} /> Ready
-                              </button>
-                            )}
-
-                            {/* Booked History Button */}
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              style={{
-                                color: '#7c3aed',
-                                borderColor: '#ddd6fe',
-                                background: '#f5f3ff',
-                                fontWeight: 600,
-                                fontSize: 12
-                              }}
-                              onClick={() => setHistoryDress(d)}
-                              title="Is dress ki booking history dekhein"
-                            >
-                              <History size={13} /> History
-                            </button>
-
-                            {/* Edit Button */}
-                            {!isViewer && (
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => setModal(d)}
-                                style={{ fontSize: 12 }}
-                              >
-                                <Edit size={12} /> Edit
-                              </button>
-                            )}
-
-                            {/* Activate / Deactivate Button */}
-                            {isOwner && (
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                style={{ color: d.active ? '#ef4444' : '#10b981', fontSize: 12 }}
-                                onClick={() => toggleActive(d)}
-                                disabled={togglingId === d.id}
-                              >
-                                {togglingId === d.id ? '...' : d.active ? (
-                                  <><ToggleLeft size={12} /> Deactivate</>
-                                ) : (
-                                  <><ToggleRight size={12} /> Activate</>
-                                )}
-                              </button>
-                            )}
+                            <ActionMenu
+                              items={[
+                                {
+                                  key: 'history',
+                                  label: 'History',
+                                  icon: <History size={13} />,
+                                  color: '#7c3aed',
+                                  onClick: () => setHistoryDress(d),
+                                },
+                                !isViewer && {
+                                  key: 'edit',
+                                  label: 'Edit',
+                                  icon: <Edit size={13} />,
+                                  onClick: () => setModal(d),
+                                },
+                                !d.active && {
+                                  key: 'remark',
+                                  label: 'View Remark',
+                                  icon: <FileText size={13} />,
+                                  color: '#b45309',
+                                  onClick: () => setRemarkDress(d),
+                                },
+                                isOwner && {
+                                  key: 'toggle',
+                                  label: d.active ? 'Deactivate' : 'Activate',
+                                  icon: d.active ? <ToggleLeft size={13} /> : <ToggleRight size={13} />,
+                                  color: d.active ? '#ef4444' : '#10b981',
+                                  disabled: togglingId === d.id,
+                                  onClick: () => toggleActive(d),
+                                },
+                              ].filter(Boolean)}
+                            />
                           </div>
                         </td>
                       </tr>
@@ -1241,6 +1356,60 @@ export default function DressesPage() {
           onSaved={() => reloadRef.current && reloadRef.current()}
           userRole={userRole}
         />
+      )}
+
+      {/* ─── Deactivate (Remark required) Modal ─────────────────────── */}
+      {deactivateTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="card" style={{ width: 440, maxWidth: '95%', padding: 22 }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
+              Dress Inactive Karein — {deactivateTarget.code}
+            </h3>
+            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>{deactivateTarget.name}</div>
+            <label style={labelStyle}>Remark / Wajah (zaroori)</label>
+            <textarea
+              className="form-input"
+              rows={3}
+              autoFocus
+              placeholder="e.g. Dress kharab ho gayi / bik gayi / kho gayi..."
+              value={deactivateRemark}
+              onChange={e => setDeactivateRemark(e.target.value)}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setDeactivateTarget(null)} disabled={deactivating}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ background: '#ef4444', borderColor: '#ef4444' }}
+                disabled={deactivating || !deactivateRemark.trim()}
+                onClick={confirmDeactivate}
+              >
+                {deactivating ? 'Saving...' : 'Deactivate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── View Remark Modal ─────────────────────────────────────── */}
+      {remarkDress && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="card" style={{ width: 420, maxWidth: '95%', padding: 22 }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
+              Remark — {remarkDress.code}
+            </h3>
+            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>{remarkDress.name}</div>
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 12, fontSize: 13.5, color: '#7f1d1d', whiteSpace: 'pre-wrap' }}>
+              {remarkDress.inactive_remark || 'Koi remark darj nahi hai.'}
+            </div>
+            {remarkDress.inactive_at && (
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>Inactive on: {remarkDress.inactive_at}</div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setRemarkDress(null)}>Band Karein</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ─── Dress Booking History Modal ────────────────────────────── */}

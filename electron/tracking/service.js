@@ -28,6 +28,12 @@ function createTrackingService(db, bookingsService, paymentsService) {
     return d.toISOString().slice(0, 10);
   }
 
+  function getNext2DaysIso() {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    return d.toISOString().slice(0, 10);
+  }
+
   function getDaysLate(returningDate, today) {
     if (!returningDate || !today) return 0;
     const r = new Date(returningDate + 'T00:00:00');
@@ -37,7 +43,13 @@ function createTrackingService(db, bookingsService, paymentsService) {
   }
 
   // ─── LIST DELIVERIES ──────────────────────────────────────────────────────
-  function listDeliveries(session, { filter = 'today', date = null, search = '' } = {}) {
+  function listDeliveries(session, {
+    filter = 'today',
+    date = null,
+    search = '',
+    dateFrom = null,
+    dateTo = null,
+  } = {}) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
 
     const today = getTodayIso();
@@ -66,6 +78,11 @@ function createTrackingService(db, bookingsService, paymentsService) {
       conditions.push('b.delivered_on IS NULL');
     } else if (filter === 'delivered') {
       conditions.push('b.delivered_on IS NOT NULL');
+    } else if (filter === 'custom' && dateFrom) {
+      const from = dateFrom;
+      const to   = dateTo || dateFrom;
+      conditions.push('b.delivery_date >= ? AND b.delivery_date <= ?');
+      params.push(from, to);
     } else if (date) {
       conditions.push('b.delivery_date = ? AND b.delivered_on IS NULL');
       params.push(date);
@@ -103,25 +120,35 @@ function createTrackingService(db, bookingsService, paymentsService) {
       ORDER BY b.delivery_date ASC, b.booking_no ASC
     `).all(...params);
 
-    // Fetch individual items with ready state for each booking
+    // Fetch individual items with ready state + live dress condition from dresses table
     const getItems = db.prepare(`
-      SELECT id, line_no, detail_no, dress_name_snapshot, size, quantity, rate, line_total,
-             jewellery, clutch_purse, hand_bag, double_dupatta, shoes,
-             is_ready, item_condition
-      FROM booking_items
-      WHERE booking_id = ? AND deleted_at IS NULL
-      ORDER BY line_no ASC
+      SELECT bi.id, bi.line_no, bi.detail_no, bi.dress_name_snapshot, bi.size,
+             bi.quantity, bi.rate, bi.line_total,
+             bi.jewellery, bi.clutch_purse, bi.hand_bag, bi.double_dupatta, bi.shoes,
+             bi.attachments,
+             bi.is_ready, bi.item_condition,
+             bi.dress_id,
+             COALESCE(d.condition_status, bi.item_condition, 'fresh') AS dress_condition_status
+      FROM booking_items bi
+      LEFT JOIN dresses d ON d.id = bi.dress_id AND d.deleted_at IS NULL
+      WHERE bi.booking_id = ? AND bi.deleted_at IS NULL
+      ORDER BY bi.line_no ASC
     `);
 
-    return bookings.map(b => ({
-      ...b,
-      items: getItems.all(b.id),
-      all_ready: b.total_items > 0 && b.ready_items === b.total_items,
-    }));
+    return bookings.map(b => {
+      const items = getItems.all(b.id);
+      const isFullyReady = b.total_items > 0 && b.ready_items === b.total_items;
+      return {
+        ...b,
+        items,
+        all_ready: isFullyReady,
+        readiness_status: isFullyReady ? 'fully_ready' : 'pending_ready',
+      };
+    });
   }
 
   // ─── LIST RETURNS ─────────────────────────────────────────────────────────
-  function listReturns(session, { filter = 'all', search = '' } = {}) {
+  function listReturns(session, { filter = 'all', search = '', dateFrom = null, dateTo = null } = {}) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
 
     const today = getTodayIso();
@@ -138,6 +165,9 @@ function createTrackingService(db, bookingsService, paymentsService) {
       conditions.push('b.returned_on IS NOT NULL');
     } else if (filter === 'pending') {
       conditions.push('b.returned_on IS NULL');
+    } else if (filter === 'custom' && dateFrom) {
+      conditions.push('b.returning_date >= ? AND b.returning_date <= ?');
+      params.push(dateFrom, dateTo || dateFrom);
     }
 
     if (search && search.trim()) {
@@ -177,11 +207,23 @@ function createTrackingService(db, bookingsService, paymentsService) {
         b.returning_date ASC, b.booking_no ASC
     `).all(...params);
 
+    const getItems = db.prepare(`
+      SELECT bi.id, bi.line_no, bi.dress_name_snapshot, bi.size, bi.quantity,
+             bi.dress_id, bi.return_qty, bi.return_note, bi.item_condition,
+             COALESCE(d.condition_status, 'good') AS dress_condition_status
+      FROM booking_items bi
+      LEFT JOIN dresses d ON d.id = bi.dress_id AND d.deleted_at IS NULL
+      WHERE bi.booking_id = ? AND bi.deleted_at IS NULL
+      ORDER BY bi.line_no ASC
+    `);
+
     return rows.map(r => {
       const isOverdue = Boolean(r.delivered_on && !r.returned_on && r.returning_date && r.returning_date < today);
       const daysLate = isOverdue ? getDaysLate(r.returning_date, today) : 0;
+      const items = getItems.all(r.id);
       return {
         ...r,
+        items,
         is_overdue: isOverdue,
         days_late: daysLate,
       };
@@ -290,12 +332,50 @@ function createTrackingService(db, bookingsService, paymentsService) {
     remainingAmount = null,
     closeBooking = false,
     closeReason = '',
+    itemReturns = null,
   }) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER]);
     const user = session?.user || session;
     const dateVal = returnedOn || getTodayIso();
-    const finalCondition = condition || returnCondition || 'OK';
-    const finalDamageNote = damageNote || returnDamageNote || '';
+    let finalCondition = condition || returnCondition || 'OK';
+    let finalDamageNote = damageNote || returnDamageNote || '';
+
+    function normalizeDressStatus(c) {
+      const s = String(c || '').toLowerCase().trim();
+      if (s.includes('clean') || s.includes('dry')) return 'need_dry_clean';
+      if (s.includes('damage') || s.includes('repair') || s.includes('kharab')) return 'need_repair';
+      return 'good';
+    }
+    const bookingLevelStatus = normalizeDressStatus(finalCondition);
+
+    // Validate per-item returns and derive the overall booking condition
+    if (Array.isArray(itemReturns) && itemReturns.length > 0) {
+      const dbItems = db.prepare('SELECT id, dress_name_snapshot, quantity FROM booking_items WHERE booking_id = ? AND deleted_at IS NULL').all(bookingId);
+      const dbMap = new Map(dbItems.map(i => [i.id, i]));
+      const notes = [];
+      let worst = 'good';
+      for (const r of itemReturns) {
+        const it = dbMap.get(Number(r.itemId));
+        if (!it) continue;
+        const st = normalizeDressStatus(r.condition);
+        const qty = r.returnedQty == null ? Number(it.quantity || 1) : Number(r.returnedQty);
+        if (!Number.isInteger(qty) || qty < 0 || qty > Number(it.quantity || 1)) {
+          throw new Error(`${it.dress_name_snapshot}: returned quantity 0 se ${it.quantity} ke darmiyan honi chahiye.`);
+        }
+        const note = String(r.note || '').trim();
+        if (st === 'need_repair' && !note) {
+          throw new Error(`${it.dress_name_snapshot}: Damage / Repair ki description likhna lazmi hai.`);
+        }
+        if (qty < Number(it.quantity || 1) && !note) {
+          throw new Error(`${it.dress_name_snapshot}: sirf ${qty}/${it.quantity} pieces wapas aaye — wajah likhein.`);
+        }
+        if (st === 'need_repair') worst = 'need_repair';
+        else if (st === 'need_dry_clean' && worst !== 'need_repair') worst = 'need_dry_clean';
+        if (note) notes.push(`${it.dress_name_snapshot}: ${note}`);
+      }
+      finalCondition = worst === 'need_repair' ? 'Need Repair' : worst === 'need_dry_clean' ? 'Need Dry Clean' : 'Good';
+      finalDamageNote = notes.join(' | ');
+    }
 
     const booking = db.prepare(`
       SELECT id, booking_no, status, delivered_on, returned_on,
@@ -336,28 +416,29 @@ function createTrackingService(db, bookingsService, paymentsService) {
           WHERE id = ?
         `).run(dateVal, finalCondition, finalDamageNote || null, damagePhoto || null, autoDeliver, user.id, bookingId);
 
-        // 0. Update dress condition_status & queue maintenance if dry-clean or repair needed
-        const condLower = String(finalCondition || '').toLowerCase().trim();
-        let targetConditionStatus = 'good';
-        let isMaintenance = false;
-
-        if (condLower.includes('clean') || condLower.includes('dry')) {
-          targetConditionStatus = 'need_dry_clean';
-          isMaintenance = true;
-        } else if (condLower.includes('damage') || condLower.includes('repair') || condLower.includes('kharab')) {
-          targetConditionStatus = 'need_repair';
-          isMaintenance = true;
-        } else {
-          targetConditionStatus = 'good';
-        }
-
+        // 0. Per-item dress condition update (+ maintenance queue)
         const bookingItems = db.prepare(`
-          SELECT bi.dress_id, bi.dress_name_snapshot
+          SELECT bi.id, bi.dress_id, bi.dress_name_snapshot, bi.quantity
           FROM booking_items bi
           WHERE bi.booking_id = ? AND bi.deleted_at IS NULL
         `).all(bookingId);
 
+        const itemMap = new Map((Array.isArray(itemReturns) ? itemReturns : []).map(x => [Number(x.itemId), x]));
+
         for (const item of bookingItems) {
+          const input = itemMap.get(item.id);
+          const itemStatus = input ? normalizeDressStatus(input.condition) : bookingLevelStatus;
+          const itemNote = (input?.note || (input ? '' : finalDamageNote) || '').trim();
+          const itemQty = input && input.returnedQty != null ? Number(input.returnedQty) : Number(item.quantity || 1);
+          const isMaintenance = itemStatus === 'need_dry_clean' || itemStatus === 'need_repair';
+
+          db.prepare(`
+            UPDATE booking_items
+            SET item_condition = ?, return_note = ?, return_qty = ?,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE id = ?
+          `).run(itemStatus, itemNote || null, itemQty, item.id);
+
           if (item.dress_id) {
             try {
               db.prepare(`
@@ -365,7 +446,7 @@ function createTrackingService(db, bookingsService, paymentsService) {
                 SET condition_status = ?,
                     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
                 WHERE id = ? AND deleted_at IS NULL
-              `).run(targetConditionStatus, item.dress_id);
+              `).run(itemStatus, item.dress_id);
 
               if (isMaintenance) {
                 db.prepare(`
@@ -375,8 +456,8 @@ function createTrackingService(db, bookingsService, paymentsService) {
                 `).run(
                   item.dress_id,
                   bookingId,
-                  targetConditionStatus,
-                  finalDamageNote || `Returned with status: ${finalCondition}`,
+                  itemStatus,
+                  itemNote || `Returned with status: ${finalCondition}`,
                   damagePhoto || null,
                   dateVal
                 );
@@ -478,12 +559,12 @@ function createTrackingService(db, bookingsService, paymentsService) {
   }
 
   // ─── TOGGLE ITEM READY (Per-line prep tick) ───────────────────────────────
-  function toggleItemReady(session, { itemId, isReady }) {
+  function toggleItemReady(session, { itemId, isReady, conditionStatus }) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER]);
     const user = session?.user || session;
     const readyVal = isReady ? 1 : 0;
 
-    const item = db.prepare('SELECT id, booking_id, is_ready FROM booking_items WHERE id = ? AND deleted_at IS NULL').get(itemId);
+    const item = db.prepare('SELECT id, booking_id, dress_id, is_ready, item_condition FROM booking_items WHERE id = ? AND deleted_at IS NULL').get(itemId);
     if (!item) throw new Error(`Item #${itemId} not found.`);
 
     return withAudit(
@@ -492,16 +573,51 @@ function createTrackingService(db, bookingsService, paymentsService) {
       'ITEM_READY_TOGGLED',
       'booking_items',
       itemId,
-      { oldValues: { is_ready: item.is_ready }, newValues: { is_ready: readyVal } },
+      { oldValues: { is_ready: item.is_ready }, newValues: { is_ready: readyVal, conditionStatus } },
       () => {
-        db.prepare(`
-          UPDATE booking_items
-          SET is_ready = ?,
-              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-          WHERE id = ?
-        `).run(readyVal, itemId);
+        if (conditionStatus) {
+          db.prepare(`
+            UPDATE booking_items
+            SET is_ready = ?,
+                item_condition = ?,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE id = ?
+          `).run(readyVal, conditionStatus, itemId);
 
-        return { ok: true, itemId, is_ready: readyVal };
+          // If dress_id is linked, update live dress condition and complete maintenance logs
+          if (item.dress_id) {
+            const validDressStatus = ['fresh', 'good', 'need_dry_clean', 'need_repair'].includes(conditionStatus)
+              ? conditionStatus
+              : 'good';
+
+            db.prepare(`
+              UPDATE dresses
+              SET condition_status = ?,
+                  updated_by = ?,
+                  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+              WHERE id = ? AND deleted_at IS NULL
+            `).run(validDressStatus, user.id, item.dress_id);
+
+            if (validDressStatus === 'good' || validDressStatus === 'fresh') {
+              db.prepare(`
+                UPDATE dress_maintenance_logs
+                SET completed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+                    completed_by = ?,
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                WHERE dress_id = ? AND completed_at IS NULL
+              `).run(user.id, item.dress_id);
+            }
+          }
+        } else {
+          db.prepare(`
+            UPDATE booking_items
+            SET is_ready = ?,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE id = ?
+          `).run(readyVal, itemId);
+        }
+
+        return { ok: true, itemId, is_ready: readyVal, conditionStatus: conditionStatus || null };
       }
     );
   }

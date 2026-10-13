@@ -79,6 +79,7 @@ function createReportsService(db, settingsService) {
     dateFrom = null,
     dateTo = null,
     cityId = null,
+    readinessFilter = null, // 'fully_ready' | 'pending_ready' | null
   } = {}) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
 
@@ -183,12 +184,16 @@ function createReportsService(db, settingsService) {
 
     // Get line details for each booking
     const getItems = db.prepare(`
-      SELECT id, dress_name_snapshot, size, quantity, rate, line_total,
-             jewellery, clutch_purse, hand_bag, double_dupatta, shoes,
-             is_ready, item_condition
-      FROM booking_items
-      WHERE booking_id = ? AND deleted_at IS NULL
-      ORDER BY line_no ASC
+      SELECT bi.id, bi.dress_name_snapshot, bi.size, bi.quantity, bi.rate, bi.line_total,
+             bi.jewellery, bi.clutch_purse, bi.hand_bag, bi.double_dupatta, bi.shoes,
+             bi.attachments,
+             bi.is_ready, bi.item_condition,
+             bi.dress_id,
+             COALESCE(d.condition_status, bi.item_condition, 'fresh') AS dress_condition_status
+      FROM booking_items bi
+      LEFT JOIN dresses d ON d.id = bi.dress_id AND d.deleted_at IS NULL
+      WHERE bi.booking_id = ? AND bi.deleted_at IS NULL
+      ORDER BY bi.line_no ASC
     `);
 
     const enrichedRows = rows.map(r => {
@@ -198,16 +203,89 @@ function createReportsService(db, settingsService) {
       const grandTotalNum = Number(r.grand_total || 0);
       const secDepositNum = Number(r.security_deposit || 0);
 
-      // Legacy string
-      const itemsDetail = items.map(it => {
+      // Readiness derived values
+      const readyItemCount = items.filter(it => it.is_ready).length;
+      const isFullyReady = items.length > 0 && readyItemCount === items.length;
+
+      /**
+       * Parse attachments for a booking item.
+       * New bookings: stored as JSON array in `it.attachments`
+       * Old bookings: stored as boolean columns (jewellery, clutch_purse, etc.)
+       * Returns a plain string array e.g. ['Belt', 'Crown', 'Dupatta']
+       */
+      function getAcc(it) {
+        // 1. Try new JSON attachments column first
+        if (it.attachments) {
+          try {
+            const parsed = typeof it.attachments === 'string'
+              ? JSON.parse(it.attachments)
+              : it.attachments;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              return parsed.map(s => String(s).trim()).filter(Boolean);
+            }
+          } catch (_) {
+            // fall through to CSV parse
+            const csv = String(it.attachments).split(',').map(s => s.trim()).filter(Boolean);
+            if (csv.length > 0) return csv;
+          }
+        }
+        // 2. Fall back to legacy boolean columns
         const acc = [];
         if (it.jewellery) acc.push('Jewellery');
         if (it.clutch_purse) acc.push('Purse');
         if (it.hand_bag) acc.push('Bag');
         if (it.double_dupatta) acc.push('2x Dupatta');
         if (it.shoes) acc.push('Shoes');
+        return acc;
+      }
+
+      // Helper for condition text and html badge
+      function getCondBadgeHtml(status) {
+        const s = String(status || 'fresh').toLowerCase();
+        let label = 'Fresh';
+        let color = '#1d4ed8';
+        let bg = '#dbeafe';
+        let border = '#93c5fd';
+
+        if (s === 'good') {
+          label = 'Good';
+          color = '#15803d';
+          bg = '#dcfce7';
+          border = '#86efac';
+        } else if (s === 'need_dry_clean' || s.includes('dry')) {
+          label = 'Dry-Clean';
+          color = '#b45309';
+          bg = '#fef3c7';
+          border = '#fde68a';
+        } else if (s === 'need_repair' || s.includes('repair') || s.includes('damage')) {
+          label = 'Repair';
+          color = '#b91c1c';
+          bg = '#fee2e2';
+          border = '#fca5a5';
+        } else if (s !== 'fresh') {
+          label = status;
+          color = '#64748b';
+          bg = '#f1f5f9';
+          border = '#e2e8f0';
+        }
+
+        return `<span style="font-size:8px;font-weight:700;color:${color};background:${bg};border:1px solid ${border};border-radius:4px;padding:1px 5px;white-space:nowrap;">${escapeHtml(label)}</span>`;
+      }
+
+      function getCondText(status) {
+        const s = String(status || 'fresh').toLowerCase();
+        if (s === 'good') return ' [Good]';
+        if (s === 'need_dry_clean' || s.includes('dry')) return ' [Dry-Clean]';
+        if (s === 'need_repair' || s.includes('repair') || s.includes('damage')) return ' [Repair]';
+        return ' [Fresh]';
+      }
+
+      // Legacy string
+      const itemsDetail = items.map(it => {
+        const acc = getAcc(it);
         const accStr = acc.length > 0 ? ` [${acc.join(', ')}]` : '';
-        return `${it.dress_name_snapshot}${it.size ? ` (${it.size})` : ''}${accStr}`;
+        const condStr = getCondText(it.dress_condition_status);
+        return `${it.dress_name_snapshot}${it.size ? ` (${it.size})` : ''}${condStr}${accStr}`;
       }).join(' • ');
 
       // Plain text representations for Excel
@@ -219,15 +297,11 @@ function createReportsService(db, settingsService) {
       const itemsTextList = items.map(it => {
         const checkMark = it.is_ready ? '☑' : '☐';
         const sizeStr = it.size ? ` (${it.size})` : '';
+        const condTag = getCondText(it.dress_condition_status);
         const readyTag = it.is_ready ? ' [Ready]' : '';
-        const acc = [];
-        if (it.jewellery) acc.push('Jewellery');
-        if (it.clutch_purse) acc.push('Purse');
-        if (it.hand_bag) acc.push('Bag');
-        if (it.double_dupatta) acc.push('2x Dupatta');
-        if (it.shoes) acc.push('Shoes');
-        const accStr = acc.length > 0 ? ` [${acc.join(', ')}]` : '';
-        return `${checkMark} ${it.dress_name_snapshot}${sizeStr}${accStr}${readyTag}`;
+        const acc = getAcc(it);
+        const accStr = acc.length > 0 ? `\n  • ${acc.join(', ')}` : '';
+        return `${checkMark} ${it.dress_name_snapshot}${sizeStr}${condTag}${readyTag}${accStr}`;
       }).join('\n');
 
       const dressesPrepDisplayText = [
@@ -241,7 +315,9 @@ function createReportsService(db, settingsService) {
         secDepositNum > 0 ? `Deposit: Rs. ${secDepositNum.toLocaleString()}` : ''
       ].filter(Boolean).join('\n');
 
-      const statusDisplayText = isDelivered ? 'Delivered' : 'Pending';
+      const statusDisplayText = isDelivered
+        ? 'Delivered'
+        : (isFullyReady ? 'Fully Ready' : 'Pending Ready');
 
       // HTML representations for PDF
       const bookingDisplayHtml = `
@@ -267,23 +343,26 @@ function createReportsService(db, settingsService) {
       const dressesPrepHtml = `
         <div>
           ${items.length > 0 ? items.map(it => {
-            const isReady = Boolean(it.is_ready);
-            const checkIcon = isReady ? '☑' : '☐';
-            const sizeStr = it.size ? ` (${escapeHtml(it.size)})` : '';
-            const acc = [];
-            if (it.jewellery) acc.push('Jewellery');
-            if (it.clutch_purse) acc.push('Purse');
-            if (it.hand_bag) acc.push('Bag');
-            if (it.double_dupatta) acc.push('2x Dupatta');
-            if (it.shoes) acc.push('Shoes');
-            const accStr = acc.length > 0 ? ` <span style="font-size: 8.5px; color: #64748b;">[${escapeHtml(acc.join(', '))}]</span>` : '';
-            const readyBadge = isReady ? ` <span style="font-size: 8.5px; font-weight: 700; color: #059669; background: #d1fae5; padding: 1px 5px; border-radius: 4px;">Ready</span>` : '';
-            return `<div style="margin-bottom: 2px; font-size: 9.5px; line-height: 1.3;">
-              <span style="font-size: 10px; color: ${isReady ? '#059669' : '#64748b'};">${checkIcon}</span>
-              <span style="font-weight: ${isReady ? '700' : '500'}; color: ${isReady ? '#065f46' : '#1e293b'};">${escapeHtml(it.dress_name_snapshot)}${sizeStr}${accStr}${readyBadge}</span>
+        const isReady = Boolean(it.is_ready);
+        const checkIcon = isReady ? '&#9745;' : '&#9744;';
+        const sizeStr = it.size ? ` (${escapeHtml(it.size)})` : '';
+        const acc = getAcc(it);
+        const accBadges = acc.length > 0
+          ? `<div style="margin-top:2px;margin-left:14px;display:flex;flex-wrap:wrap;gap:3px;">${acc.map(a => `<span style="font-size:8px;color:#6d28d9;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:4px;padding:1px 5px;font-weight:600;">&bull; ${escapeHtml(a)}</span>`).join('')}</div>`
+          : '';
+        const condBadge = getCondBadgeHtml(it.dress_condition_status);
+        const readyBadge = isReady ? ` <span style="font-size:8.5px;font-weight:700;color:#059669;background:#d1fae5;padding:1px 5px;border-radius:4px;">Ready</span>` : '';
+        return `<div style="margin-bottom:4px;padding:3px 5px;border-radius:4px;background:${isReady ? '#ecfdf5' : '#f8fafc'};border:1px solid ${isReady ? '#a7f3d0' : '#e2e8f0'};">
+              <div style="display:flex;align-items:center;gap:4px;font-size:9.5px;line-height:1.3;flex-wrap:wrap;">
+                <span style="font-size:10px;color:${isReady ? '#059669' : '#64748b'};">${checkIcon}</span>
+                <span style="font-weight:${isReady ? '700' : '500'};color:${isReady ? '#065f46' : '#1e293b'};">${escapeHtml(it.dress_name_snapshot)}${sizeStr}</span>
+                ${condBadge}
+                ${readyBadge}
+              </div>
+              ${accBadges}
             </div>`;
-          }).join('') : `<span style="color: #64748b; font-size: 9.5px;">${escapeHtml(r.dresses_summary || 'Koi dress nahi')}</span>`}
-          ${r.delivery_note ? `<div style="font-size: 8.5px; color: #64748b; font-style: italic; margin-top: 2px;">Note: ${escapeHtml(r.delivery_note)}</div>` : ''}
+      }).join('') : `<span style="color:#64748b;font-size:9.5px;">${escapeHtml(r.dresses_summary || 'Koi dress nahi')}</span>`}
+          ${r.delivery_note ? `<div style="font-size:8.5px;color:#64748b;font-style:italic;margin-top:2px;">Note: ${escapeHtml(r.delivery_note)}</div>` : ''}
         </div>
       `;
 
@@ -299,11 +378,11 @@ function createReportsService(db, settingsService) {
         </div>
       `;
 
-      const statusDisplayHtml = `
-        <span class="badge-status ${isDelivered ? 'badge-closed' : 'badge-pending'}">
-          ${isDelivered ? 'Delivered' : 'Pending'}
-        </span>
-      `;
+      const statusDisplayHtml = isDelivered
+        ? `<span class="badge-status badge-closed">Delivered</span>`
+        : isFullyReady
+          ? `<span class="badge-status badge-ready" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;">Fully Ready</span>`
+          : `<span class="badge-status badge-pending">Pending Ready</span>`;
 
       return {
         ...r,
@@ -332,9 +411,24 @@ function createReportsService(db, settingsService) {
       };
     });
 
-    const totalRemaining = enrichedRows.reduce((sum, r) => sum + (r.remaining || 0), 0);
-    const totalGrand = enrichedRows.reduce((sum, r) => sum + (r.grand_total || 0), 0);
-    const totalPaid = enrichedRows.reduce((sum, r) => sum + (r.amount_paid || 0), 0);
+    // Apply readiness sub-filter (if requested)
+    let finalRows = enrichedRows;
+    if (readinessFilter === 'fully_ready') {
+      finalRows = enrichedRows.filter(r => r.all_ready === true ||
+        (r.total_items > 0 && r.ready_items === r.total_items));
+      filtersSummary += ' • Readiness: Fully Ready Only';
+    } else if (readinessFilter === 'pending_ready') {
+      finalRows = enrichedRows.filter(r => !(r.all_ready === true ||
+        (r.total_items > 0 && r.ready_items === r.total_items)));
+      filtersSummary += ' • Readiness: Pending Ready Only';
+    }
+
+    const totalRemaining = finalRows.reduce((sum, r) => sum + (r.remaining || 0), 0);
+    const totalGrand = finalRows.reduce((sum, r) => sum + (r.grand_total || 0), 0);
+    const totalPaid = finalRows.reduce((sum, r) => sum + (r.amount_paid || 0), 0);
+
+    // Swap enrichedRows → finalRows in return
+    const enrichedRows2 = finalRows;
 
     return {
       reportType: 'delivery_sheet',
@@ -351,9 +445,9 @@ function createReportsService(db, settingsService) {
         { header: 'PAYMENT DUE', key: 'payment_due_display', width: 22, align: 'right', isText: true },
         { header: 'STATUS', key: 'status_display', width: 14, align: 'center', isText: true },
       ],
-      rows: enrichedRows,
+      rows: enrichedRows2,
       totals: {
-        booking_display: `${enrichedRows.length} Bookings`,
+        booking_display: `${enrichedRows2.length} Bookings`,
         customer_display: '',
         delivery_date_display: '',
         returning_date: '',
@@ -363,8 +457,8 @@ function createReportsService(db, settingsService) {
         status_display: '',
 
         // Preserved for tests and reports
-        booking_no: `${enrichedRows.length} Bookings`,
-        total_items: enrichedRows.reduce((sum, r) => sum + (r.items ? r.items.length : 1), 0),
+        booking_no: `${enrichedRows2.length} Bookings`,
+        total_items: enrichedRows2.reduce((sum, r) => sum + (r.items ? r.items.length : 1), 0),
         grand_total: totalGrand,
         amount_paid: totalPaid,
         remaining: totalRemaining,
@@ -543,6 +637,187 @@ function createReportsService(db, settingsService) {
         security_deposit: totalDeposit,
         remaining: totalRemaining,
       },
+    };
+  }
+
+  // ─── 3b. RETURNS TRACKER (mirrors Returns page filters) ───────────────────
+  function getReturnsTracker(session, { filter = 'all', search = '', dateFrom = null, dateTo = null } = {}) {
+    requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
+
+    const today = getTodayIso();
+    const conditions = ['b.deleted_at IS NULL'];
+    const params = [];
+    let label = 'Sabhi Returns';
+
+    if (filter === 'overdue') {
+      conditions.push('b.delivered_on IS NOT NULL AND b.returned_on IS NULL AND b.returning_date < ?');
+      params.push(today);
+      label = 'Overdue Only';
+    } else if (filter === 'due_today') {
+      conditions.push('b.returning_date = ? AND b.returned_on IS NULL');
+      params.push(today);
+      label = `Aaj Due (${today})`;
+    } else if (filter === 'returned') {
+      conditions.push('b.returned_on IS NOT NULL');
+      label = 'Returned';
+    } else if (filter === 'pending') {
+      conditions.push('b.returned_on IS NULL');
+      label = 'Pending Return';
+    } else if (filter === 'custom' && dateFrom) {
+      const to = dateTo || dateFrom;
+      conditions.push('b.returning_date >= ? AND b.returning_date <= ?');
+      params.push(dateFrom, to);
+      label = `Custom Date: ${dateFrom} to ${to}`;
+    }
+
+    if (search && search.trim()) {
+      const q = `%${search.trim()}%`;
+      conditions.push('(CAST(b.booking_no AS TEXT) LIKE ? OR cu.name LIKE ? OR cu.phone LIKE ? OR cu.cnic LIKE ?)');
+      params.push(q, q, q, q);
+      label += ` • Search: "${search.trim()}"`;
+    }
+
+    const rows = db.prepare(`
+      SELECT
+        b.id, b.booking_no, b.delivered_on, b.returning_date, b.returned_on,
+        b.return_condition, b.return_damage_note,
+        b.remaining, b.security_deposit,
+        cu.name AS customer_name, cu.phone AS customer_phone,
+        (SELECT group_concat(dress_name_snapshot || ' x' || quantity, ', ') FROM booking_items WHERE booking_id = b.id AND deleted_at IS NULL) AS dresses_summary
+      FROM bookings b
+      LEFT JOIN customers cu ON cu.id = b.customer_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY b.returning_date ASC, b.booking_no ASC
+    `).all(...params);
+
+    const enriched = rows.map(r => {
+      const isOverdue = Boolean(r.delivered_on && !r.returned_on && r.returning_date && r.returning_date < today);
+      const daysLate = isOverdue ? getDaysLate(r.returning_date, today) : 0;
+      return {
+        ...r,
+        customer_phone: r.customer_phone || '',
+        delivered_on: r.delivered_on || 'Not delivered',
+        returned_on: r.returned_on || '—',
+        return_condition: r.returned_on ? (r.return_condition || 'Good') : '—',
+        return_damage_note: r.return_damage_note || '',
+        status_label: r.returned_on ? 'Returned' : isOverdue ? `${daysLate} din LATE` : 'Awaiting Return',
+      };
+    });
+
+    const totalRemaining = enriched.reduce((s, r) => s + (r.remaining || 0), 0);
+    const totalDeposit = enriched.reduce((s, r) => s + (r.security_deposit || 0), 0);
+
+    return {
+      reportType: 'returns_tracker',
+      title: 'Returns Tracker (واپسی کی رپورٹ)',
+      subtitle: `Returns as of ${today} (${enriched.length} records)`,
+      filtersSummary: label,
+      orientation: 'landscape',
+      columns: [
+        { header: 'Booking #', key: 'booking_no', isNum: true, width: 12 },
+        { header: 'Customer', key: 'customer_name', width: 20 },
+        { header: 'Phone', key: 'customer_phone', isText: true, width: 15 },
+        { header: 'Dresses', key: 'dresses_summary', width: 28 },
+        { header: 'Delivered', key: 'delivered_on', width: 13 },
+        { header: 'Expected Return', key: 'returning_date', width: 14 },
+        { header: 'Returned On', key: 'returned_on', width: 13 },
+        { header: 'Status', key: 'status_label', width: 15 },
+        { header: 'Condition', key: 'return_condition', width: 14 },
+        { header: 'Damage Note', key: 'return_damage_note', width: 24 },
+        // { header: 'Deposit', key: 'security_deposit', isMoney: true, width: 12 },
+        // { header: 'Remaining', key: 'remaining', isMoney: true, width: 12 },
+      ],
+      rows: enriched,
+      totals: {
+        booking_no: `${enriched.length} Records`,
+        security_deposit: totalDeposit,
+        remaining: totalRemaining,
+      },
+    };
+  }
+
+  // ─── 3c. DRESS CATALOGUE (mirrors Dress Catalogue page filters) ───────────
+  function getDressCatalogue(session, { search = '', categoryId = null, activeOnly = false, inactiveOnly = false, conditionStatus = null } = {}) {
+    requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
+
+    const conditions = ['d.deleted_at IS NULL'];
+    const params = [];
+    const parts = [];
+
+    if (search && search.trim()) {
+      const q = `%${search.trim()}%`;
+      conditions.push('(d.name LIKE ? OR d.code LIKE ? OR dc.name LIKE ?)');
+      params.push(q, q, q);
+      parts.push(`Search: "${search.trim()}"`);
+    }
+    if (categoryId) {
+      conditions.push('d.category_id = ?');
+      params.push(categoryId);
+      const cat = db.prepare('SELECT name FROM dress_categories WHERE id = ?').get(categoryId);
+      parts.push(`Category: ${cat ? cat.name : categoryId}`);
+    }
+    if (activeOnly) {
+      conditions.push('d.active = 1');
+      parts.push('Active only');
+    }
+    if (inactiveOnly) {
+      conditions.push('d.active = 0');
+      parts.push('Inactive only');
+    }
+    if (conditionStatus) {
+      conditions.push(`COALESCE(d.condition_status, 'fresh') = ?`);
+      params.push(conditionStatus);
+      parts.push(`Condition: ${conditionLabel(conditionStatus)}`);
+    }
+
+    function conditionLabel(s) {
+      return ({ fresh: 'Fresh', good: 'Good', need_dry_clean: 'Need Dry Clean', need_repair: 'Need Repair' })[s] || s || 'Fresh';
+    }
+
+    const rows = db.prepare(`
+      SELECT
+        d.id, d.code, d.name, d.size, d.rental_price, d.active, d.inactive_remark, d.inactive_at,
+        COALESCE(d.condition_status, 'fresh') AS condition_status,
+        dc.name AS category,
+        (SELECT COUNT(*) FROM booking_items bi
+         JOIN bookings b ON b.id = bi.booking_id
+         WHERE bi.dress_id = d.id AND bi.deleted_at IS NULL AND b.deleted_at IS NULL) AS booking_count
+      FROM dresses d
+      LEFT JOIN dress_categories dc ON dc.id = d.category_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY d.name COLLATE NOCASE
+    `).all(...params);
+
+    const enriched = rows.map(r => ({
+      ...r,
+      category: r.category || '—',
+      size: r.size || '—',
+      condition_label: conditionLabel(r.condition_status),
+      status_label: r.active ? 'Active' : 'Inactive',
+      inactive_remark: r.active ? '' : (r.inactive_remark || ''),
+    }));
+
+    const showRemark = inactiveOnly || enriched.some(r => !r.active);
+    const columns = [
+        { header: 'Code', key: 'code', isText: true, width: 12 },
+        { header: 'Dress Name', key: 'name', width: 32 },
+        { header: 'Category', key: 'category', width: 16 },
+        { header: 'Condition', key: 'condition_label', width: 16 },
+        { header: 'Size', key: 'size', width: 10 },
+        { header: 'Rate', key: 'rental_price', isMoney: true, width: 14 },
+        { header: 'Bookings', key: 'booking_count', isNum: true, width: 10 },
+        { header: 'Status', key: 'status_label', width: 10 },
+    ];
+    if (showRemark) columns.push({ header: 'Inactive Remark', key: 'inactive_remark', width: 36 });
+
+    return {
+      reportType: 'dress_catalogue',
+      title: 'Dress Catalogue',
+      subtitle: `${enriched.length} dresses`,
+      filtersSummary: parts.length ? parts.join(' • ') : 'All Dresses',
+      columns,
+      rows: enriched,
+      totals: { code: `${enriched.length} Dresses` },
     };
   }
 
@@ -1086,6 +1361,10 @@ function createReportsService(db, settingsService) {
         return getPrepareDryCleanList(session, filters);
       case 'returns_overdue':
         return getReturnsDueAndOverdue(session, filters);
+      case 'returns_tracker':
+        return getReturnsTracker(session, filters);
+      case 'dress_catalogue':
+        return getDressCatalogue(session, filters);
       case 'customer_report':
         return getCustomerReport(session, filters);
       case 'customers_month':

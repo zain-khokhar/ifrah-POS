@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   RotateCcw, AlertTriangle, CheckCircle2, Clock, Search, RefreshCw,
   Phone, User, X, Check, DollarSign, ShieldAlert, AlertCircle,
-  Camera, Printer, Sparkles,
+  Camera, Printer, Sparkles, FileText, Download,
 } from 'lucide-react';
 import ReceiptModal from '@/components/ReceiptModal';
 
@@ -16,6 +16,7 @@ const FILTERS = [
   { id: 'due_today', label: 'Aaj Due (Today)' },
   { id: 'pending',   label: 'Pending Return' },
   { id: 'returned',  label: 'Wapas Aa Gaye (Returned)' },
+  { id: 'custom',    label: '📅 Custom Date' },
 ];
 
 function ReturnsContent() {
@@ -34,6 +35,10 @@ function ReturnsContent() {
   const [condition, setCondition]               = useState('OK');
   const [damageNote, setDamageNote]             = useState('');
   const [damagePhoto, setDamagePhoto]           = useState('');
+  const [exporting, setExporting]               = useState(false);
+  const [itemRows, setItemRows]                 = useState([]);
+  const [dateFrom, setDateFrom]                 = useState('');
+  const [dateTo, setDateTo]                     = useState('');
 
   // Prompts State
   const [refundDeposit, setRefundDeposit]             = useState(false);
@@ -67,6 +72,8 @@ function ReturnsContent() {
         const res = await window.electronAPI?.tracking?.listReturns({
           filter,
           search,
+          dateFrom: filter === 'custom' ? dateFrom : null,
+          dateTo: filter === 'custom' ? dateTo : null,
         });
         if (res?.ok) {
           setReturns(res.data || []);
@@ -82,7 +89,36 @@ function ReturnsContent() {
     }
     reloadRef.current = fetchReturns;
     fetchReturns();
-  }, [filter, search]);
+  }, [filter, search, dateFrom, dateTo]);
+
+  async function handleExport(kind) {
+    setExporting(kind);
+    try {
+      const filters = {
+        filter,
+        search: search || '',
+        dateFrom: filter === 'custom' ? dateFrom : null,
+        dateTo: filter === 'custom' ? dateTo : null,
+      };
+      const api = window.electronAPI?.reports;
+      const res = kind === 'pdf'
+        ? await api?.exportPdf({ reportType: 'returns_tracker', filters })
+        : await api?.exportExcel({ reportType: 'returns_tracker', filters });
+      if (res?.ok && !res.canceled) {
+        alert(`✓ Returns ${kind === 'pdf' ? 'PDF' : 'Excel'} saved: ${res.filePath}`);
+      } else if (!res?.canceled && res?.message) {
+        alert(res.message);
+      }
+    } catch (err) {
+      alert(`Export failed: ${err.message}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function updateItemRow(itemId, patch) {
+    setItemRows(rows => rows.map(r => (r.itemId === itemId ? { ...r, ...patch } : r)));
+  }
 
   // Open Mark Returned Modal with smart default pre-fills
   function openReturnModal(booking) {
@@ -91,6 +127,15 @@ function ReturnsContent() {
     setCondition(booking.return_condition || 'Good');
     setDamageNote(booking.return_damage_note || '');
     setDamagePhoto(booking.return_damage_photo || '');
+    setItemRows((booking.items || []).map(it => ({
+      itemId: it.id,
+      name: it.dress_name_snapshot,
+      size: it.size,
+      quantity: Number(it.quantity || 1),
+      returnedQty: String(Number(it.quantity || 1)),
+      condition: 'good',
+      note: '',
+    })));
 
     // Default prompt values
     const dep = Number(booking.security_deposit || 0);
@@ -117,9 +162,13 @@ function ReturnsContent() {
       const res = await window.electronAPI?.tracking?.markReturned({
         bookingId: returnModalItem.id,
         returnedOn,
-        condition,
-        damageNote: damageNote.trim(),
         damagePhoto: damagePhoto.trim(),
+        itemReturns: itemRows.map(r => ({
+          itemId: r.itemId,
+          condition: r.condition,
+          note: r.note.trim(),
+          returnedQty: Number(r.returnedQty),
+        })),
         refundDeposit,
         depositRefundMethod,
         depositRefundAmount: refundDeposit ? Number(depositRefundAmount) : null,
@@ -179,6 +228,24 @@ function ReturnsContent() {
           >
             <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Refresh
           </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => handleExport('pdf')}
+            disabled={exporting}
+            title="Current filter ke hisab se PDF export"
+            style={{ gap: 6, fontWeight: 600, color: '#0f172a' }}
+          >
+            <FileText size={13} style={{ color: '#7c3aed' }} /> {exporting === 'pdf' ? 'Exporting...' : 'Export to PDF'}
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => handleExport('excel')}
+            disabled={exporting}
+            title="Current filter ke hisab se Excel export"
+            style={{ gap: 6, fontWeight: 600, color: '#0f172a' }}
+          >
+            <Download size={13} style={{ color: '#10b981' }} /> {exporting === 'excel' ? 'Exporting...' : 'Export to Excel'}
+          </button>
           {overdueCount > 0 && (
             <span className="badge badge-danger" style={{ padding: '6px 12px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <AlertTriangle size={13} /> {overdueCount} Overdue
@@ -189,6 +256,14 @@ function ReturnsContent() {
 
       <div className="page-body">
         {/* ── Filters & Search ──────────────────────────────── */}
+        {filter === 'custom' && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', fontSize: 12.5, fontWeight: 600, color: '#334155' }}>
+            Expected Return Date:
+            <input type="date" className="form-input" style={{ width: 160, height: 34 }} value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+            se
+            <input type="date" className="form-input" style={{ width: 160, height: 34 }} value={dateTo} min={dateFrom || undefined} onChange={e => setDateTo(e.target.value)} />
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {FILTERS.map(f => (
@@ -549,60 +624,82 @@ function ReturnsContent() {
               />
             </div>
 
-            {/* Condition Choice: Good / Need Dry Clean / Need Repair */}
+            {/* Per-dress return details */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
-                Dress Condition (ڈریس کی واپسی حالت)
+                Har Dress ki Detail (Per-Dress Return Check)
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                {[
-                  { id: 'Good', label: '✓ Good (ٹھیک)', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
-                  { id: 'Need Dry Clean', label: '🧺 Need Dry Clean (ڈرائی کلین)', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
-                  { id: 'Need Repair', label: '⚠️ Need Repair (مرمت / سلائی)', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
-                ].map(c => {
-                  const isSelected = condition === c.id || (c.id === 'Good' && condition === 'OK') || (c.id === 'Need Dry Clean' && condition === 'Needs cleaning') || (c.id === 'Need Repair' && condition === 'Damaged');
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setCondition(c.id)}
-                      style={{
-                        padding: '10px 8px',
-                        borderRadius: 8,
-                        border: `2px solid ${isSelected ? c.color : c.border}`,
-                        background: isSelected ? c.bg : '#ffffff',
-                        color: isSelected ? c.color : '#475569',
-                        fontWeight: isSelected ? 800 : 600,
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        textAlign: 'center',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      {c.label}
-                    </button>
-                  );
-                })}
-              </div>
+              {itemRows.length === 0 && (
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>Is booking mein koi dress item nahi.</div>
+              )}
+              {itemRows.map(row => {
+                const needsNote = row.condition === 'need_repair' || row.condition === 'need_dry_clean' || Number(row.returnedQty) < row.quantity;
+                const noteRequired = row.condition === 'need_repair' || Number(row.returnedQty) < row.quantity;
+                return (
+                  <div key={row.itemId} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, marginBottom: 10, background: '#ffffff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
+                        {row.name}{row.size ? ` (${row.size})` : ''}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#475569' }}>
+                        Wapas aaye:
+                        <input
+                          type="number"
+                          min="0"
+                          max={row.quantity}
+                          className="form-input"
+                          style={{ width: 62, height: 28, padding: '2px 6px' }}
+                          value={row.returnedQty}
+                          onChange={e => updateItemRow(row.itemId, { returnedQty: e.target.value })}
+                        />
+                        / {row.quantity} pcs
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                      {[
+                        { id: 'good', label: '✓ Good', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+                        { id: 'need_dry_clean', label: '🧺 Dry Clean', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+                        { id: 'need_repair', label: '⚠️ Damage / Repair', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+                      ].map(c => {
+                        const isSelected = row.condition === c.id;
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => updateItemRow(row.itemId, { condition: c.id })}
+                            style={{
+                              padding: '7px 4px', borderRadius: 7,
+                              border: `2px solid ${isSelected ? c.color : c.border}`,
+                              background: isSelected ? c.bg : '#ffffff',
+                              color: isSelected ? c.color : '#475569',
+                              fontWeight: isSelected ? 800 : 600, fontSize: 11.5, cursor: 'pointer',
+                            }}
+                          >
+                            {c.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {needsNote && (
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder={
+                          row.condition === 'need_repair'
+                            ? 'Damage ki description (zaroori) e.g. dupatta phata hua'
+                            : Number(row.returnedQty) < row.quantity
+                            ? 'Kam pieces wapas aane ki wajah (zaroori)'
+                            : 'Dry-clean note (optional)'
+                        }
+                        value={row.note}
+                        onChange={e => updateItemRow(row.itemId, { note: e.target.value })}
+                        style={{ marginTop: 8, borderColor: noteRequired && !row.note.trim() ? '#fca5a5' : undefined }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
-
-            {/* Damage / Cleaning Note */}
-            {(condition === 'Need Repair' || condition === 'Damaged' || condition === 'Need Dry Clean' || condition === 'Needs cleaning') && (
-              <div style={{ marginBottom: 16, background: (condition === 'Need Repair' || condition === 'Damaged') ? '#fef2f2' : '#fffbeb', padding: 12, borderRadius: 8, border: `1px solid ${(condition === 'Need Repair' || condition === 'Damaged') ? '#fecaca' : '#fde68a'}` }}>
-                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: (condition === 'Need Repair' || condition === 'Damaged') ? '#991b1b' : '#92400e', marginBottom: 5 }}>
-                  {(condition === 'Need Repair' || condition === 'Damaged') ? 'Kharabi / Marammat ki Tafseel (Repair Note - Required)' : 'Dry-Clean / Cleaning Note'}
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder={(condition === 'Need Repair' || condition === 'Damaged') ? 'e.g. Dupatta torn, zipper broken, stain on sleeve...' : 'e.g. Mild stain on border, needs dry clean'}
-                  value={damageNote}
-                  onChange={e => setDamageNote(e.target.value)}
-                  autoFocus
-                />
-              </div>
-            )}
-
             {/* ── RETURN FLOW PROMPTS ───────────────────────────── */}
             <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 14, marginBottom: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', marginBottom: 10 }}>

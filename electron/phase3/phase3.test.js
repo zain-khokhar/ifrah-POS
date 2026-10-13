@@ -346,21 +346,27 @@ describe('dresses service', () => {
 
   it('activeOnly filter works', () => {
     const res = dressesService.create(ownerSession, { name: 'To Deactivate', rental_price: 0 });
-    dressesService.setActive(ownerSession, res.id, false);
+    dressesService.setActive(ownerSession, res.id, false, 'test remark');
     const active = dressesService.list(ownerSession, { activeOnly: true });
     assert.ok(!active.some(d => d.id === res.id));
   });
 
   it('deactivate sets active=0', () => {
     const res = dressesService.create(ownerSession, { name: 'Deact Me', rental_price: 0 });
-    dressesService.setActive(ownerSession, res.id, false);
+    dressesService.setActive(ownerSession, res.id, false, 'test remark');
     const row = dressesService.get(ownerSession, res.id);
     assert.equal(row.active, 0);
+    assert.equal(row.inactive_remark, 'test remark');
+  });
+
+  it('deactivate without remark is rejected', () => {
+    const res = dressesService.create(ownerSession, { name: 'No Remark', rental_price: 0 });
+    assert.throws(() => dressesService.setActive(ownerSession, res.id, false), /Remark/i);
   });
 
   it('reactivate sets active=1', () => {
     const res = dressesService.create(ownerSession, { name: 'React Me', rental_price: 0 });
-    dressesService.setActive(ownerSession, res.id, false);
+    dressesService.setActive(ownerSession, res.id, false, 'test remark');
     dressesService.setActive(ownerSession, res.id, true);
     const row = dressesService.get(ownerSession, res.id);
     assert.equal(row.active, 1);
@@ -368,7 +374,7 @@ describe('dresses service', () => {
 
   it('cashier cannot deactivate (owner only)', () => {
     const res = dressesService.create(ownerSession, { name: 'CashierDe', rental_price: 0 });
-    assert.throws(() => dressesService.setActive(cashierSession, res.id, false), /FORBIDDEN|permission/i);
+    assert.throws(() => dressesService.setActive(cashierSession, res.id, false, 'x'), /FORBIDDEN|permission/i);
   });
 
   it('similar-name suggestion works', () => {
