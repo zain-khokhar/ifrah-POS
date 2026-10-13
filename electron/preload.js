@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimize: () => ipcRenderer.invoke('app:minimize'),
   maximize: () => ipcRenderer.invoke('app:maximize'),
   close:    () => ipcRenderer.invoke('app:close'),
+  zoomIn:    () => ipcRenderer.invoke('app:zoom-in'),
+  zoomOut:   () => ipcRenderer.invoke('app:zoom-out'),
+  zoomReset: () => ipcRenderer.invoke('app:zoom-reset'),
+  getZoom:   () => ipcRenderer.invoke('app:get-zoom'),
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   auth: {
