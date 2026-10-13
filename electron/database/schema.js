@@ -159,6 +159,9 @@ const SCHEMA_STATEMENTS = [
     description     TEXT,
     photo_path      TEXT,
     active          INTEGER NOT NULL DEFAULT 1,          -- 1 = active, 0 = deactivated
+    condition_status TEXT   NOT NULL DEFAULT 'fresh'
+                    CHECK(condition_status IN ('fresh','good','need_dry_clean','need_repair')),
+    attachments     TEXT    DEFAULT NULL,                -- JSON array of accessories
     created_by      INTEGER REFERENCES users(id),
     updated_by      INTEGER REFERENCES users(id),
     created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -233,6 +236,7 @@ const SCHEMA_STATEMENTS = [
     hand_bag            INTEGER NOT NULL DEFAULT 0,
     double_dupatta      INTEGER NOT NULL DEFAULT 0,
     shoes               INTEGER NOT NULL DEFAULT 0,
+    attachments         TEXT DEFAULT NULL,
     is_ready            INTEGER NOT NULL DEFAULT 0,       -- Phase 9 night-before preparation tick
     item_condition      TEXT DEFAULT 'OK',                -- Phase 9 item condition
     created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -358,6 +362,44 @@ const SCHEMA_STATEMENTS = [
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL,
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`,
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 16. DRESS_MAINTENANCE_LOGS (Dry-clean, damage & repair history)
+  // ──────────────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS dress_maintenance_logs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
+    dress_id        INTEGER NOT NULL REFERENCES dresses(id),
+    booking_id      INTEGER REFERENCES bookings(id),
+    status          TEXT    NOT NULL CHECK(status IN ('need_dry_clean','need_repair','fresh','good')),
+    notes           TEXT,
+    photo_path      TEXT,
+    sent_at         TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    completed_at    TEXT    DEFAULT NULL,
+    completed_by    INTEGER REFERENCES users(id),
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    deleted_at      TEXT    DEFAULT NULL,
+    sync_status     TEXT    NOT NULL DEFAULT 'local',
+    last_synced_at  TEXT    DEFAULT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_dress_maintenance_dress ON dress_maintenance_logs(dress_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_dress_maintenance_status ON dress_maintenance_logs(status)`,
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 17. DRESS_ATTACHMENTS (Learning list for accessories & attachments)
+  // ──────────────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS dress_attachments (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
+    name            TEXT    NOT NULL,
+    name_normalized TEXT    NOT NULL UNIQUE,
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    deleted_at      TEXT    DEFAULT NULL,
+    sync_status     TEXT    NOT NULL DEFAULT 'local',
+    last_synced_at  TEXT    DEFAULT NULL
   )`,
 ];
 

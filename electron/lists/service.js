@@ -17,10 +17,11 @@ const { requireRole, ROLES } = require('../auth/roles');
 
 // Map public table names → actual SQLite table names (safety whitelist)
 const ALLOWED_TABLES = Object.freeze({
-  cities:          'cities',
-  casts:           'casts',
-  relation_types:  'relation_types',
-  dress_categories:'dress_categories',
+  cities:           'cities',
+  casts:            'casts',
+  relation_types:   'relation_types',
+  dress_categories: 'dress_categories',
+  dress_attachments:'dress_attachments',
 });
 
 function createListsService(db) {
@@ -131,10 +132,13 @@ function createListsService(db) {
     return { ok: true };
   }
 
-  // ─── DISABLE (Owner only, soft delete) ──────────────────────────────────
+  // ─── DISABLE (Owner for lists, Cashier+Owner for dress_attachments) ────
   function disable(session, tableName, id) {
     validateTable(tableName);
-    const user = requireRole(session, [ROLES.OWNER]);
+    const allowedRoles = tableName === 'dress_attachments'
+      ? [ROLES.OWNER, ROLES.CASHIER]
+      : [ROLES.OWNER];
+    const user = requireRole(session, allowedRoles);
 
     const old = db.prepare(`SELECT name FROM ${tableName} WHERE id = ?`).get(id);
     withAudit(db, user, `${tableName}.disable`, tableName, id,

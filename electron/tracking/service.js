@@ -277,8 +277,10 @@ function createTrackingService(db, bookingsService, paymentsService) {
   function markReturned(session, {
     bookingId,
     returnedOn = null,
-    condition = 'OK',
+    condition = null,
+    returnCondition = null,
     damageNote = '',
+    returnDamageNote = '',
     damagePhoto = '',
     refundDeposit = false,
     depositRefundMethod = 'cash',
@@ -292,6 +294,8 @@ function createTrackingService(db, bookingsService, paymentsService) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER]);
     const user = session?.user || session;
     const dateVal = returnedOn || getTodayIso();
+    const finalCondition = condition || returnCondition || 'OK';
+    const finalDamageNote = damageNote || returnDamageNote || '';
 
     const booking = db.prepare(`
       SELECT id, booking_no, status, delivered_on, returned_on,
@@ -314,7 +318,7 @@ function createTrackingService(db, bookingsService, paymentsService) {
       bookingId,
       {
         oldValues: { returned_on: prevReturned, return_condition: booking.return_condition },
-        newValues: { returned_on: dateVal, return_condition: condition, return_damage_note: damageNote },
+        newValues: { returned_on: dateVal, return_condition: finalCondition, return_damage_note: finalDamageNote },
       },
       () => {
         // If not marked delivered yet, auto-mark delivery date as well
@@ -330,7 +334,58 @@ function createTrackingService(db, bookingsService, paymentsService) {
               updated_by = ?,
               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
           WHERE id = ?
-        `).run(dateVal, condition, damageNote || null, damagePhoto || null, autoDeliver, user.id, bookingId);
+        `).run(dateVal, finalCondition, finalDamageNote || null, damagePhoto || null, autoDeliver, user.id, bookingId);
+
+        // 0. Update dress condition_status & queue maintenance if dry-clean or repair needed
+        const condLower = String(finalCondition || '').toLowerCase().trim();
+        let targetConditionStatus = 'good';
+        let isMaintenance = false;
+
+        if (condLower.includes('clean') || condLower.includes('dry')) {
+          targetConditionStatus = 'need_dry_clean';
+          isMaintenance = true;
+        } else if (condLower.includes('damage') || condLower.includes('repair') || condLower.includes('kharab')) {
+          targetConditionStatus = 'need_repair';
+          isMaintenance = true;
+        } else {
+          targetConditionStatus = 'good';
+        }
+
+        const bookingItems = db.prepare(`
+          SELECT bi.dress_id, bi.dress_name_snapshot
+          FROM booking_items bi
+          WHERE bi.booking_id = ? AND bi.deleted_at IS NULL
+        `).all(bookingId);
+
+        for (const item of bookingItems) {
+          if (item.dress_id) {
+            try {
+              db.prepare(`
+                UPDATE dresses
+                SET condition_status = ?,
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                WHERE id = ? AND deleted_at IS NULL
+              `).run(targetConditionStatus, item.dress_id);
+
+              if (isMaintenance) {
+                db.prepare(`
+                  INSERT INTO dress_maintenance_logs (
+                    dress_id, booking_id, status, notes, photo_path, sent_at
+                  ) VALUES (?, ?, ?, ?, ?, ?)
+                `).run(
+                  item.dress_id,
+                  bookingId,
+                  targetConditionStatus,
+                  finalDamageNote || `Returned with status: ${finalCondition}`,
+                  damagePhoto || null,
+                  dateVal
+                );
+              }
+            } catch (dErr) {
+              console.warn('[Tracking] Failed to sync dress condition:', dErr.message);
+            }
+          }
+        }
 
         // 1. Refund security deposit prompt automation
         if (refundDeposit && booking.security_deposit > 0) {

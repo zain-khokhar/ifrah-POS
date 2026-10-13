@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, Search, X, Check, ChevronDown, RefreshCw,
   Edit, Shirt, Tag, ToggleLeft, ToggleRight, Upload, Image,
@@ -20,6 +20,46 @@ function StatusBadge({ status }) {
   return (
     <span className={`badge ${s.cls}`} style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px' }}>
       {s.label}
+    </span>
+  );
+}
+
+function parseAttachments(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  try {
+    const parsed = JSON.parse(val);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return String(val).split(',').map(s => s.trim()).filter(Boolean);
+  }
+}
+
+function ConditionBadge({ status }) {
+  if (status === 'need_repair') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fee2e2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '2px 8px', fontSize: 11.5, fontWeight: 700 }}>
+        ⚠️ Need Repair
+      </span>
+    );
+  }
+  if (status === 'need_dry_clean') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', borderRadius: 6, padding: '2px 8px', fontSize: 11.5, fontWeight: 700 }}>
+        🧺 Need Dry Clean
+      </span>
+    );
+  }
+  if (status === 'good') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: 6, padding: '2px 8px', fontSize: 11.5, fontWeight: 700 }}>
+        ✓ Good
+      </span>
+    );
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: 6, padding: '2px 8px', fontSize: 11.5, fontWeight: 700 }}>
+      ✨ Fresh
     </span>
   );
 }
@@ -105,15 +145,92 @@ function CategoryCombobox({ value, onChange, disabled }) {
 
 // ─── Dress Form Modal ─────────────────────────────────────────────────────────
 function DressModal({ editDress, onClose, onSaved, userRole }) {
-  const [form,     setForm]     = useState(editDress ? {
-    code: editDress.code || '', name: editDress.name || '',
-    category_id: editDress.category_id || '', size: editDress.size || '',
-    rental_price: editDress.rental_price ?? '', description: editDress.description || '',
-  } : { code: '', name: '', category_id: '', size: '', rental_price: '', description: '' });
+  const [form, setForm] = useState(editDress ? {
+    code: editDress.code || '',
+    name: editDress.name || '',
+    category_id: editDress.category_id || '',
+    size: editDress.size || '',
+    rental_price: editDress.rental_price ?? '',
+    description: editDress.description || '',
+    condition_status: editDress.condition_status || 'fresh',
+    attachments: parseAttachments(editDress.attachments),
+  } : {
+    code: '',
+    name: '',
+    category_id: '',
+    size: '',
+    rental_price: '',
+    description: '',
+    condition_status: 'fresh',
+    attachments: [],
+  });
+  const [customAttachInput, setCustomAttachInput] = useState('');
   const [similar,  setSimilar]  = useState([]);
   const [saving,   setSaving]   = useState(false);
   const [error,    setError]    = useState('');
   const [codeHint, setCodeHint] = useState('');
+
+  const [learnedAttachments, setLearnedAttachments] = useState([]);
+  const customAttachInputRef = useRef(null);
+
+  const loadLearnedAttachments = useCallback(async () => {
+    try {
+      const res = await window.electronAPI?.lists.get('dress_attachments');
+      if (res?.ok && Array.isArray(res.data)) {
+        setLearnedAttachments(res.data);
+      }
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    loadLearnedAttachments();
+  }, [loadLearnedAttachments]);
+
+  const addAttachment = async (text) => {
+    const raw = String(text || '').trim();
+    if (!raw) return;
+
+    const itemsToAdd = raw.split(',').map(s => s.trim()).filter(Boolean);
+    if (itemsToAdd.length === 0) return;
+
+    let updatedAtts = [...form.attachments];
+    let newToSave = [];
+
+    for (const item of itemsToAdd) {
+      if (!updatedAtts.some(a => a.toLowerCase() === item.toLowerCase())) {
+        updatedAtts.push(item);
+      }
+      if (!learnedAttachments.some(o => o.name.toLowerCase() === item.toLowerCase())) {
+        newToSave.push(item);
+      }
+    }
+
+    set('attachments', updatedAtts);
+    setCustomAttachInput('');
+    customAttachInputRef.current?.focus();
+
+    for (const item of newToSave) {
+      try {
+        const res = await window.electronAPI?.lists.add('dress_attachments', item);
+        if (res?.ok && res.id) {
+          setLearnedAttachments(prev => [...prev, { id: res.id, name: item }]);
+        }
+      } catch (_) {}
+    }
+  };
+
+  const removeAttachment = (item) => {
+    set('attachments', form.attachments.filter(a => a.toLowerCase() !== item.toLowerCase()));
+  };
+
+  const deleteLearnedAttachment = async (e, opt) => {
+    e.stopPropagation();
+    if (!confirm(`Kya aap "${opt.name}" ko saved suggestions se hatana chahte hain?`)) return;
+    try {
+      await window.electronAPI?.lists.disable('dress_attachments', opt.id);
+      setLearnedAttachments(prev => prev.filter(o => o.id !== opt.id));
+    } catch (_) {}
+  };
 
   const isOwner  = userRole === 'owner';
   const isViewer = userRole === 'viewer';
@@ -154,6 +271,8 @@ function DressModal({ editDress, onClose, onSaved, userRole }) {
       size: form.size.trim() || null,
       rental_price: form.rental_price ? parseInt(form.rental_price, 10) : 0,
       description: form.description.trim() || null,
+      condition_status: form.condition_status || 'fresh',
+      attachments: form.attachments || [],
     };
 
     let res;
@@ -221,6 +340,176 @@ function DressModal({ editDress, onClose, onSaved, userRole }) {
               <label style={labelStyle}>Rental Rate (Rs.)</label>
               <input className="form-input" type="number" min="0" value={form.rental_price}
                 onChange={e => set('rental_price', e.target.value)} placeholder="0" disabled={isViewer} />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Condition Status (حالت)</label>
+              <select
+                className="form-input form-select"
+                value={form.condition_status}
+                onChange={e => set('condition_status', e.target.value)}
+                disabled={isViewer}
+                style={{ fontWeight: 600 }}
+              >
+                <option value="fresh">✨ Fresh (نئی / بالکل صاف)</option>
+                <option value="good">✓ Good (ٹھیک / استعمال شدہ صاف)</option>
+                <option value="need_dry_clean">🧺 Need Dry Clean (ڈرائی کلین درکار)</option>
+                <option value="need_repair">⚠️ Need Repair (مرمت / سلائی درکار)</option>
+              </select>
+            </div>
+
+            {/* Dynamic Accessories / Attachments */}
+            <div style={{ gridColumn: '1/-1' }}>
+              <label style={labelStyle}>Attachments / Accessories (ڈریس کے ساتھ لوازمات)</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8, minHeight: 28, alignItems: 'center' }}>
+                {form.attachments.map((att, idx) => (
+                  <span
+                    key={idx}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      background: '#f3e8ff',
+                      color: '#7e22ce',
+                      border: '1px solid #d8b4fe',
+                      borderRadius: 6,
+                      padding: '3px 8px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {att}
+                    {!isViewer && (
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(att)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: '#9333ea',
+                          padding: '0 2px',
+                          fontSize: 14,
+                          lineHeight: 1,
+                          fontWeight: 800,
+                        }}
+                        title="Hataein"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </span>
+                ))}
+                {form.attachments.length === 0 && (
+                  <span style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>
+                    Koi attachment shamil nahi hai (No accessories attached)
+                  </span>
+                )}
+              </div>
+
+              {!isViewer && (
+                <>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <input
+                      ref={customAttachInputRef}
+                      className="form-input"
+                      value={customAttachInput}
+                      autoComplete="off"
+                      onChange={e => setCustomAttachInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addAttachment(customAttachInput);
+                        }
+                      }}
+                      placeholder="Nayi attachment likhein aur Enter dabayein (e.g. Belt, Crown, Dupatta)..."
+                      style={{ fontSize: 12.5 }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => addAttachment(customAttachInput)}
+                      disabled={!customAttachInput.trim()}
+                      style={{ padding: '0 14px', fontWeight: 700 }}
+                    >
+                      + Add
+                    </button>
+                  </div>
+
+                  {/* Learned Quick Suggestion Chips */}
+                  {learnedAttachments.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Quick Add:</span>
+                      {learnedAttachments.map(opt => {
+                        const hasIt = form.attachments.some(a => a.toLowerCase() === opt.name.toLowerCase());
+                        return (
+                          <span
+                            key={opt.name}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              background: hasIt ? '#ede9fe' : '#ffffff',
+                              border: `1px solid ${hasIt ? '#8b5cf6' : '#cbd5e1'}`,
+                              borderRadius: 6,
+                              overflow: 'hidden',
+                              fontSize: 11,
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (hasIt) {
+                                  removeAttachment(opt.name);
+                                } else {
+                                  addAttachment(opt.name);
+                                }
+                              }}
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                color: hasIt ? '#6d28d9' : '#475569',
+                                padding: '3px 8px',
+                                fontSize: 11,
+                                fontWeight: hasIt ? 700 : 500,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 3,
+                              }}
+                              title={hasIt ? 'Deselect' : 'Add to dress'}
+                            >
+                              {hasIt ? '✓ ' : '+ '}
+                              {opt.name}
+                            </button>
+                            {opt.id && (
+                              <button
+                                type="button"
+                                onClick={(e) => deleteLearnedAttachment(e, opt)}
+                                style={{
+                                  border: 'none',
+                                  background: 'transparent',
+                                  borderLeft: `1px solid ${hasIt ? '#ddd6fe' : '#e2e8f0'}`,
+                                  color: '#94a3b8',
+                                  cursor: 'pointer',
+                                  padding: '3px 5px',
+                                  fontSize: 11,
+                                  lineHeight: 1,
+                                }}
+                                title={`"${opt.name}" ko saved suggestions se hatayein`}
+                                onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                                onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+                              >
+                                ×
+                              </button>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             <div style={{ gridColumn: '1/-1' }}>
@@ -619,13 +908,14 @@ const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#6
 export default function DressesPage() {
   const [dresses,    setDresses]    = useState([]);
   const [loading,    setLoading]    = useState(true);
-  const [search,     setSearch]     = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [activeOnly, setActiveOnly] = useState(false);
-  const [categories, setCategories] = useState([]);
-  const [modal,      setModal]      = useState(null);
-  const [userRole,   setUserRole]   = useState('viewer');
-  const [togglingId, setTogglingId] = useState(null);
+  const [search,          setSearch]          = useState('');
+  const [categoryId,      setCategoryId]      = useState('');
+  const [conditionFilter, setConditionFilter] = useState('');
+  const [activeOnly,      setActiveOnly]      = useState(false);
+  const [categories,      setCategories]      = useState([]);
+  const [modal,           setModal]           = useState(null);
+  const [userRole,        setUserRole]        = useState('viewer');
+  const [togglingId,      setTogglingId]      = useState(null);
 
   // History & Receipt Modal state
   const [historyDress, setHistoryDress] = useState(null);
@@ -643,14 +933,17 @@ export default function DressesPage() {
     async function fetchDresses() {
       setLoading(true);
       const res = await window.electronAPI?.dresses.list({
-        search, categoryId: categoryId || null, activeOnly,
+        search,
+        categoryId: categoryId || null,
+        activeOnly,
+        conditionStatus: conditionFilter || null,
       });
       if (res?.ok) setDresses(res.data || []);
       setLoading(false);
     }
     reloadRef.current = fetchDresses;
     fetchDresses();
-  }, [search, categoryId, activeOnly]);
+  }, [search, categoryId, conditionFilter, activeOnly]);
 
   async function toggleActive(dress) {
     setTogglingId(dress.id);
@@ -695,12 +988,24 @@ export default function DressesPage() {
             <option value="">All Categories</option>
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          <select
+            className="form-input form-select"
+            style={{ width: 180, fontWeight: conditionFilter ? 700 : 400 }}
+            value={conditionFilter}
+            onChange={e => setConditionFilter(e.target.value)}
+          >
+            <option value="">All Conditions</option>
+            <option value="fresh">✨ Fresh (صاف)</option>
+            <option value="good">✓ Good (ٹھیک)</option>
+            <option value="need_dry_clean">🧺 Need Dry Clean</option>
+            <option value="need_repair">⚠️ Need Repair</option>
+          </select>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13.5, color: '#64748b', whiteSpace: 'nowrap', fontWeight: 500 }}>
             <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} style={{ width: 14, height: 14, accentColor: '#7c3aed' }} />
             Active only
           </label>
-          {(search || categoryId || activeOnly) && (
-            <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setCategoryId(''); setActiveOnly(false); }}>
+          {(search || categoryId || conditionFilter || activeOnly) && (
+            <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setCategoryId(''); setConditionFilter(''); setActiveOnly(false); }}>
               <X size={12} /> Clear
             </button>
           )}
@@ -736,132 +1041,185 @@ export default function DressesPage() {
                     <th style={{ width: 100 }}>Code</th>
                     <th>Dress Name</th>
                     <th>Category</th>
+                    <th>Condition</th>
                     <th>Size</th>
                     <th style={{ textAlign: 'right' }}>Rate</th>
                     <th style={{ textAlign: 'center' }}>Bookings</th>
                     <th>Status</th>
-                    <th style={{ textAlign: 'center', width: 220 }}>Actions</th>
+                    <th style={{ textAlign: 'center', width: 250 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dresses.map(d => (
-                    <tr
-                      key={d.id}
-                      style={{ opacity: d.active ? 1 : 0.65, cursor: 'pointer' }}
-                      onClick={() => setHistoryDress(d)}
-                      title="Is dress ki booking history dekhne ke liye click karein"
-                    >
-                      {/* Code */}
-                      <td>
-                        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 800, color: '#7c3aed' }}>
-                          {d.code}
-                        </span>
-                      </td>
+                  {dresses.map(d => {
+                    const attachmentsList = parseAttachments(d.attachments);
+                    const needsService = d.condition_status === 'need_dry_clean' || d.condition_status === 'need_repair';
+                    return (
+                      <tr
+                        key={d.id}
+                        style={{ opacity: d.active ? 1 : 0.65, cursor: 'pointer' }}
+                        onClick={() => setHistoryDress(d)}
+                        title="Is dress ki booking history dekhne ke liye click karein"
+                      >
+                        {/* Code */}
+                        <td>
+                          <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 800, color: '#7c3aed' }}>
+                            {d.code}
+                          </span>
+                        </td>
 
-                      {/* Name */}
-                      <td>
-                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 13.5 }}>
-                          {d.name}
-                        </div>
-                        {d.description && (
-                          <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 1 }}>
-                            {d.description}
+                        {/* Name & Attachments */}
+                        <td>
+                          <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 13.5 }}>
+                            {d.name}
                           </div>
-                        )}
-                      </td>
+                          {d.description && (
+                            <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 1 }}>
+                              {d.description}
+                            </div>
+                          )}
+                          {attachmentsList.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                              {attachmentsList.map((att, i) => (
+                                <span
+                                  key={i}
+                                  style={{
+                                    fontSize: 10.5,
+                                    background: '#f5f3ff',
+                                    color: '#6d28d9',
+                                    border: '1px solid #ddd6fe',
+                                    borderRadius: 4,
+                                    padding: '1px 5px',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  + {att}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
 
-                      {/* Category */}
-                      <td>
-                        <span className="badge badge-gray">{d.category || '—'}</span>
-                      </td>
+                        {/* Category */}
+                        <td>
+                          <span className="badge badge-gray">{d.category || '—'}</span>
+                        </td>
 
-                      {/* Size */}
-                      <td>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>
-                          {d.size || '—'}
-                        </span>
-                      </td>
+                        {/* Condition Status */}
+                        <td>
+                          <ConditionBadge status={d.condition_status} />
+                        </td>
 
-                      {/* Rate */}
-                      <td style={{ textAlign: 'right', fontWeight: 800, fontSize: 13.5, color: '#0f172a' }}>
-                        {d.rental_price > 0 ? `Rs. ${d.rental_price.toLocaleString()}` : '—'}
-                      </td>
+                        {/* Size */}
+                        <td>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>
+                            {d.size || '—'}
+                          </span>
+                        </td>
 
-                      {/* Bookings Count (Clickable) */}
-                      <td style={{ textAlign: 'center' }} onClick={e => { e.stopPropagation(); setHistoryDress(d); }}>
-                        <span
-                          className="badge badge-info"
-                          style={{
-                            cursor: 'pointer',
-                            fontWeight: 800,
-                            padding: '3px 10px',
-                            boxShadow: '0 1px 2px rgba(59,130,246,0.1)'
-                          }}
-                          title="Click to view history"
-                        >
-                          {d.booking_count}
-                        </span>
-                      </td>
+                        {/* Rate */}
+                        <td style={{ textAlign: 'right', fontWeight: 800, fontSize: 13.5, color: '#0f172a' }}>
+                          {d.rental_price > 0 ? `Rs. ${d.rental_price.toLocaleString()}` : '—'}
+                        </td>
 
-                      {/* Status */}
-                      <td>
-                        <span className={`badge ${d.active ? 'badge-success' : 'badge-danger'}`}>
-                          {d.active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-
-                      {/* Actions */}
-                      <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                          {/* Booked History Button */}
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
+                        {/* Bookings Count (Clickable) */}
+                        <td style={{ textAlign: 'center' }} onClick={e => { e.stopPropagation(); setHistoryDress(d); }}>
+                          <span
+                            className="badge badge-info"
                             style={{
-                              color: '#7c3aed',
-                              borderColor: '#ddd6fe',
-                              background: '#f5f3ff',
-                              fontWeight: 600,
-                              fontSize: 12
+                              cursor: 'pointer',
+                              fontWeight: 800,
+                              padding: '3px 10px',
+                              boxShadow: '0 1px 2px rgba(59,130,246,0.1)'
                             }}
-                            onClick={() => setHistoryDress(d)}
-                            title="Is dress ki booking history dekhein"
+                            title="Click to view history"
                           >
-                            <History size={13} /> History
-                          </button>
+                            {d.booking_count}
+                          </span>
+                        </td>
 
-                          {/* Edit Button */}
-                          {!isViewer && (
+                        {/* Status */}
+                        <td>
+                          <span className={`badge ${d.active ? 'badge-success' : 'badge-danger'}`}>
+                            {d.active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                          <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                            {/* Mark Ready Button if in need_dry_clean / need_repair */}
+                            {!isViewer && needsService && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{
+                                  color: '#15803d',
+                                  borderColor: '#bbf7d0',
+                                  background: '#f0fdf4',
+                                  fontWeight: 700,
+                                  fontSize: 11.5,
+                                  padding: '3px 8px',
+                                }}
+                                onClick={async () => {
+                                  const res = await window.electronAPI?.dresses.updateCondition(d.id, 'good', 'Marked ready from catalogue');
+                                  if (res?.ok && reloadRef.current) reloadRef.current();
+                                }}
+                                title="Dress tayar hai (Mark as Good/Fresh)"
+                              >
+                                <Check size={12} /> Ready
+                              </button>
+                            )}
+
+                            {/* Booked History Button */}
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm"
-                              onClick={() => setModal(d)}
-                              style={{ fontSize: 12 }}
+                              style={{
+                                color: '#7c3aed',
+                                borderColor: '#ddd6fe',
+                                background: '#f5f3ff',
+                                fontWeight: 600,
+                                fontSize: 12
+                              }}
+                              onClick={() => setHistoryDress(d)}
+                              title="Is dress ki booking history dekhein"
                             >
-                              <Edit size={12} /> Edit
+                              <History size={13} /> History
                             </button>
-                          )}
 
-                          {/* Activate / Deactivate Button */}
-                          {isOwner && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              style={{ color: d.active ? '#ef4444' : '#10b981', fontSize: 12 }}
-                              onClick={() => toggleActive(d)}
-                              disabled={togglingId === d.id}
-                            >
-                              {togglingId === d.id ? '...' : d.active ? (
-                                <><ToggleLeft size={12} /> Deactivate</>
-                              ) : (
-                                <><ToggleRight size={12} /> Activate</>
-                              )}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            {/* Edit Button */}
+                            {!isViewer && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => setModal(d)}
+                                style={{ fontSize: 12 }}
+                              >
+                                <Edit size={12} /> Edit
+                              </button>
+                            )}
+
+                            {/* Activate / Deactivate Button */}
+                            {isOwner && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ color: d.active ? '#ef4444' : '#10b981', fontSize: 12 }}
+                                onClick={() => toggleActive(d)}
+                                disabled={togglingId === d.id}
+                              >
+                                {togglingId === d.id ? '...' : d.active ? (
+                                  <><ToggleLeft size={12} /> Deactivate</>
+                                ) : (
+                                  <><ToggleRight size={12} /> Activate</>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

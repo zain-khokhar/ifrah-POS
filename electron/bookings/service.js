@@ -206,17 +206,48 @@ function createBookingsService(db) {
       const rate      = Math.max(0, parseInt(it.rate || 0, 10));
       const lineTotal = qty * rate;
 
+      const rawAtt = it.attachments;
+      let attList = [];
+      if (Array.isArray(rawAtt)) {
+        attList = rawAtt.map(s => String(s).trim()).filter(Boolean);
+      } else if (typeof rawAtt === 'string' && rawAtt.trim()) {
+        try {
+          const p = JSON.parse(rawAtt);
+          if (Array.isArray(p)) attList = p.map(s => String(s).trim()).filter(Boolean);
+          else attList = rawAtt.split(',').map(s => s.trim()).filter(Boolean);
+        } catch {
+          attList = rawAtt.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+
+      const hasAtt = (needle) => attList.some(a => a.toLowerCase().includes(needle));
+
+      const jewellery = it.jewellery || hasAtt('jewel') ? 1 : 0;
+      const clutch_purse = it.clutch_purse || hasAtt('clutch') || hasAtt('purse') ? 1 : 0;
+      const hand_bag = it.hand_bag || hasAtt('bag') ? 1 : 0;
+      const double_dupatta = it.double_dupatta || hasAtt('dupatta') ? 1 : 0;
+      const shoes = it.shoes || hasAtt('shoe') ? 1 : 0;
+
+      if (attList.length === 0) {
+        if (jewellery) attList.push('Jewellery');
+        if (clutch_purse) attList.push('Clutch Purse');
+        if (hand_bag) attList.push('Hand Bag');
+        if (double_dupatta) attList.push('Double Dupatta');
+        if (shoes) attList.push('Shoes');
+      }
+
       return {
         lineNo, detailNo, qty, rate, lineTotal,
         dressId:          it.dress_id || null,
         dressNameSnapshot: String(it.dress_name_snapshot || it.dress_name || '').trim() || 'Unknown',
         size:             String(it.size || '').trim() || null,
         description:      String(it.description || '').trim() || null,
-        jewellery:        it.jewellery ? 1 : 0,
-        clutch_purse:     it.clutch_purse ? 1 : 0,
-        hand_bag:         it.hand_bag ? 1 : 0,
-        double_dupatta:   it.double_dupatta ? 1 : 0,
-        shoes:            it.shoes ? 1 : 0,
+        jewellery,
+        clutch_purse,
+        hand_bag,
+        double_dupatta,
+        shoes,
+        attachments:      attList.length > 0 ? JSON.stringify(attList) : null,
       };
     });
   }
@@ -264,8 +295,9 @@ function createBookingsService(db) {
       INSERT INTO booking_items (
         booking_id, line_no, detail_no, dress_id, dress_name_snapshot,
         size, quantity, rate, line_total, description,
-        jewellery, clutch_purse, hand_bag, double_dupatta, shoes
-      ) VALUES (?,?,?,?,?,  ?,?,?,?,?,  ?,?,?,?,?)
+        jewellery, clutch_purse, hand_bag, double_dupatta, shoes,
+        attachments
+      ) VALUES (?,?,?,?,?,  ?,?,?,?,?,  ?,?,?,?,?, ?)
     `);
 
     let bookingId;
@@ -304,6 +336,7 @@ function createBookingsService(db) {
           bookingId, it.lineNo, it.detailNo, it.dressId, it.dressNameSnapshot,
           it.size, it.qty, it.rate, it.lineTotal, it.description,
           it.jewellery, it.clutch_purse, it.hand_bag, it.double_dupatta, it.shoes,
+          it.attachments,
         );
       }
 
@@ -505,8 +538,9 @@ function createBookingsService(db) {
       INSERT INTO booking_items (
         booking_id, line_no, detail_no, dress_id, dress_name_snapshot,
         size, quantity, rate, line_total, description,
-        jewellery, clutch_purse, hand_bag, double_dupatta, shoes
-      ) VALUES (?,?,?,?,?,  ?,?,?,?,?,  ?,?,?,?,?)
+        jewellery, clutch_purse, hand_bag, double_dupatta, shoes,
+        attachments
+      ) VALUES (?,?,?,?,?,  ?,?,?,?,?,  ?,?,?,?,?, ?)
     `);
 
     db.transaction(() => {
@@ -526,6 +560,7 @@ function createBookingsService(db) {
           id, it.lineNo, it.detailNo, it.dressId, it.dressNameSnapshot,
           it.size, it.qty, it.rate, it.lineTotal, it.description,
           it.jewellery, it.clutch_purse, it.hand_bag, it.double_dupatta, it.shoes,
+          it.attachments,
         );
       }
       db.prepare(`

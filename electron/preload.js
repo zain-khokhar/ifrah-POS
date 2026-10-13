@@ -77,6 +77,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setActive:     (id, act) => ipcRenderer.invoke('dresses:setActive', id, act),
     quickAdd:      (name)    => ipcRenderer.invoke('dresses:quickAdd', name),
     history:       (id, flt) => ipcRenderer.invoke('dresses:history', id, flt),
+    updateCondition: (id, st, notes) => ipcRenderer.invoke('dresses:updateCondition', id, st, notes),
+    listMaintenance: (filters)       => ipcRenderer.invoke('dresses:listMaintenance', filters),
   },
 
   // ── Bookings ──────────────────────────────────────────────────────────────

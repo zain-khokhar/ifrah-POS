@@ -688,23 +688,259 @@ function CustomerCard({ customer, onSelectCustomer, disabled }) {
   );
 }
 
-// ─── Accessory checkbox ───────────────────────────────────────────────────────
-function AccessCheck({ label, checked, onChange, disabled }) {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function parseAttachments(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  try {
+    const parsed = JSON.parse(val);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return String(val).split(',').map(s => s.trim()).filter(Boolean);
+  }
+}
+
+// ─── Dynamic Item Attachments Manager ─────────────────────────────────────────
+function BookingItemAttachments({ attachments = [], onChange, disabled }) {
+  const [learnedOptions, setLearnedOptions] = useState([]); // [{ id, name }]
+  const [inputText, setInputText] = useState('');
+  const inputRef = useRef(null);
+
+  // Load learned attachments from dress_attachments table
+  const loadAttachments = useCallback(async () => {
+    try {
+      const res = await window.electronAPI?.lists.get('dress_attachments');
+      if (res?.ok && Array.isArray(res.data)) {
+        setLearnedOptions(res.data);
+      }
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    loadAttachments();
+  }, [loadAttachments]);
+
+  const addAttachment = async (name) => {
+    const raw = String(name || '').trim();
+    if (!raw) return;
+
+    // Support comma-separated items e.g. "Belt, Dupatta, Purse"
+    const itemsToAdd = raw.split(',').map(s => s.trim()).filter(Boolean);
+    if (itemsToAdd.length === 0) return;
+
+    let updatedAtts = [...attachments];
+    let newToSave = [];
+
+    for (const item of itemsToAdd) {
+      if (!updatedAtts.some(a => a.toLowerCase() === item.toLowerCase())) {
+        updatedAtts.push(item);
+      }
+      if (!learnedOptions.some(o => o.name.toLowerCase() === item.toLowerCase())) {
+        newToSave.push(item);
+      }
+    }
+
+    onChange(updatedAtts);
+    setInputText('');
+    inputRef.current?.focus();
+
+    // Persist new attachments to dress_attachments table
+    for (const item of newToSave) {
+      try {
+        const res = await window.electronAPI?.lists.add('dress_attachments', item);
+        if (res?.ok && res.id) {
+          setLearnedOptions(prev => [...prev, { id: res.id, name: item }]);
+        }
+      } catch (_) {}
+    }
+  };
+
+  const removeAttachment = (item) => {
+    onChange(attachments.filter(a => a.toLowerCase() !== item.toLowerCase()));
+  };
+
+  const toggleAttachment = (chipName) => {
+    if (attachments.some(a => a.toLowerCase() === chipName.toLowerCase())) {
+      removeAttachment(chipName);
+    } else {
+      addAttachment(chipName);
+    }
+  };
+
+  const deleteLearnedOption = async (e, opt) => {
+    e.stopPropagation();
+    if (!confirm(`Kya aap "${opt.name}" ko saved suggestions se hatana chahte hain?`)) return;
+    try {
+      await window.electronAPI?.lists.disable('dress_attachments', opt.id);
+      setLearnedOptions(prev => prev.filter(o => o.id !== opt.id));
+    } catch (_) {}
+  };
+
+  // Merge any attachment already on the item that might not yet be in learnedOptions
+  const existingNames = new Set(learnedOptions.map(o => o.name.toLowerCase()));
+  const extraChips = attachments
+    .filter(a => !existingNames.has(a.toLowerCase()))
+    .map(a => ({ id: null, name: a }));
+  const allChips = [...learnedOptions, ...extraChips];
+
   return (
-    <label style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      cursor: disabled ? 'default' : 'pointer', fontSize: 12,
-      padding: '4px 9px', borderRadius: 6,
-      background: checked ? '#f5f3ff' : '#f8fafc',
-      border: `1px solid ${checked ? '#c4b5fd' : '#e2e8f0'}`,
-      color: checked ? '#7c3aed' : '#64748b',
-      fontWeight: checked ? 700 : 500,
-      userSelect: 'none', transition: 'all 0.15s ease',
-    }}>
-      <input type="checkbox" checked={!!checked} onChange={e => onChange(e.target.checked)} disabled={disabled}
-        style={{ accentColor: '#7c3aed', width: 13, height: 13 }} />
-      {label}
-    </label>
+    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>Attachments / Accessories</span>
+          <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 500 }}>(ڈریس کے ساتھ لوازمات)</span>
+        </span>
+        <span style={{ fontSize: 11, color: attachments.length > 0 ? '#7c3aed' : '#94a3b8', fontWeight: 600 }}>
+          {attachments.length} selected
+        </span>
+      </div>
+
+      {/* 1. Selected Attachments Tags */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8, minHeight: 24, alignItems: 'center' }}>
+        {attachments.map((att, idx) => (
+          <span
+            key={idx}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              background: '#ede9fe',
+              color: '#6d28d9',
+              border: '1px solid #c4b5fd',
+              borderRadius: 6,
+              padding: '3px 8px',
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            {att}
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => removeAttachment(att)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#7c3aed',
+                  padding: '0 2px',
+                  fontSize: 14,
+                  lineHeight: 1,
+                  fontWeight: 900,
+                  marginLeft: 2,
+                }}
+                title="Hataein"
+              >
+                ×
+              </button>
+            )}
+          </span>
+        ))}
+        {attachments.length === 0 && (
+          <span style={{ fontSize: 11.5, color: '#94a3b8', fontStyle: 'italic' }}>
+            Koi attachment shamil nahi hai (No accessories selected)
+          </span>
+        )}
+      </div>
+
+      {/* 2. Fast Inline Input */}
+      {!disabled && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: allChips.length > 0 ? 8 : 0 }}>
+          <input
+            ref={inputRef}
+            className="form-input"
+            value={inputText}
+            autoComplete="off"
+            onChange={e => setInputText(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addAttachment(inputText);
+              }
+            }}
+            placeholder="Nayi attachment likhein aur Enter dabayein (e.g. Belt, Crown, Dupatta)..."
+            style={{ fontSize: 12, height: 32, flex: 1 }}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => addAttachment(inputText)}
+            disabled={!inputText.trim()}
+            style={{ fontSize: 12, height: 32, padding: '0 14px', fontWeight: 700 }}
+          >
+            + Add
+          </button>
+        </div>
+      )}
+
+      {/* 3. Learned Quick Suggestion Chips */}
+      {allChips.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+          <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700, marginRight: 2 }}>Quick:</span>
+          {allChips.map(chip => {
+            const isSelected = attachments.some(a => a.toLowerCase() === chip.name.toLowerCase());
+            return (
+              <span
+                key={chip.name}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: isSelected ? '#ede9fe' : '#ffffff',
+                  border: `1px solid ${isSelected ? '#8b5cf6' : '#cbd5e1'}`,
+                  borderRadius: 6,
+                  overflow: 'hidden',
+                  fontSize: 11,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => !disabled && toggleAttachment(chip.name)}
+                  disabled={disabled}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    color: isSelected ? '#6d28d9' : '#475569',
+                    padding: '3px 8px',
+                    fontSize: 11,
+                    fontWeight: isSelected ? 700 : 500,
+                    cursor: disabled ? 'default' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}
+                  title={isSelected ? 'Deselect' : 'Add to dress'}
+                >
+                  {isSelected ? '✓ ' : '+ '}
+                  {chip.name}
+                </button>
+                {!disabled && chip.id && (
+                  <button
+                    type="button"
+                    onClick={(e) => deleteLearnedOption(e, chip)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      borderLeft: `1px solid ${isSelected ? '#ddd6fe' : '#e2e8f0'}`,
+                      color: '#94a3b8',
+                      cursor: 'pointer',
+                      padding: '3px 5px',
+                      fontSize: 11,
+                      lineHeight: 1,
+                    }}
+                    title={`"${chip.name}" ko saved suggestions se hatayein`}
+                    onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                    onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -714,6 +950,7 @@ function emptyItem() {
     _key: Math.random().toString(36).slice(2),
     dress_id: null, dress_name_snapshot: '', size: '',
     quantity: 1, rate: '', description: '',
+    attachments: [],
     jewellery: false, clutch_purse: false, hand_bag: false,
     double_dupatta: false, shoes: false,
   };
@@ -982,20 +1219,31 @@ export default function NewBookingPage() {
             relative_cnic: b.relative_cnic,
           });
           if (b.items && b.items.length > 0) {
-            setItems(b.items.map(it => ({
-              _key: String(it.id || Math.random()),
-              dress_id: it.dress_id,
-              dress_name_snapshot: it.dress_name_snapshot,
-              size: it.size || '',
-              quantity: it.quantity || 1,
-              rate: it.rate || 0,
-              description: it.description || '',
-              jewellery: Boolean(it.jewellery),
-              clutch_purse: Boolean(it.clutch_purse),
-              hand_bag: Boolean(it.hand_bag),
-              double_dupatta: Boolean(it.double_dupatta),
-              shoes: Boolean(it.shoes),
-            })));
+            setItems(b.items.map(it => {
+              let atts = parseAttachments(it.attachments);
+              if (atts.length === 0) {
+                if (it.jewellery) atts.push('Jewellery');
+                if (it.clutch_purse) atts.push('Clutch Purse');
+                if (it.hand_bag) atts.push('Hand Bag');
+                if (it.double_dupatta) atts.push('Double Dupatta');
+                if (it.shoes) atts.push('Shoes');
+              }
+              return {
+                _key: String(it.id || Math.random()),
+                dress_id: it.dress_id,
+                dress_name_snapshot: it.dress_name_snapshot,
+                size: it.size || '',
+                quantity: it.quantity || 1,
+                rate: it.rate || 0,
+                description: it.description || '',
+                attachments: atts,
+                jewellery: Boolean(it.jewellery),
+                clutch_purse: Boolean(it.clutch_purse),
+                hand_bag: Boolean(it.hand_bag),
+                double_dupatta: Boolean(it.double_dupatta),
+                shoes: Boolean(it.shoes),
+              };
+            }));
           }
           setExistingPayments(b.payments || []);
           setLastEditedBy(b.updated_by_name || b.created_by_name || '');
@@ -1054,13 +1302,19 @@ export default function NewBookingPage() {
       setItem(key, 'dress_id', null);
       setItem(key, 'dress_name_snapshot', '');
       setItem(key, 'rate', '');
+      setItem(key, 'attachments', []);
       // Clear any clash warning for this row
       setClashWarnings(prev => { const n = { ...prev }; delete n[key]; return n; });
       return;
     }
+    const dressAtts = parseAttachments(dress.attachments);
     setItems(prev => prev.map(it => it._key === key ? {
-      ...it, dress_id: dress.id, dress_name_snapshot: dress.name,
+      ...it,
+      dress_id: dress.id,
+      dress_name_snapshot: dress.name,
       rate: dress.rental_price || '',
+      size: dress.size || it.size,
+      attachments: dressAtts.length > 0 ? dressAtts : (it.attachments || []),
     } : it));
 
     // Phase 6: async clash check — only if we have a delivery date
@@ -1307,19 +1561,24 @@ export default function NewBookingPage() {
         discount: parseInt(discount || 0, 10),
         items: items
           .filter(it => it.dress_name_snapshot.trim() || it.rate)
-          .map(it => ({
-            dress_id: it.dress_id,
-            dress_name_snapshot: it.dress_name_snapshot || 'Unknown',
-            size: it.size || null,
-            quantity: parseInt(it.quantity || 1, 10),
-            rate: parseInt(it.rate || 0, 10),
-            description: it.description || null,
-            jewellery: it.jewellery ? 1 : 0,
-            clutch_purse: it.clutch_purse ? 1 : 0,
-            hand_bag: it.hand_bag ? 1 : 0,
-            double_dupatta: it.double_dupatta ? 1 : 0,
-            shoes: it.shoes ? 1 : 0,
-          })),
+          .map(it => {
+            const atts = Array.isArray(it.attachments) ? it.attachments : [];
+            const hasAtt = (needle) => atts.some(a => a.toLowerCase().includes(needle));
+            return {
+              dress_id: it.dress_id,
+              dress_name_snapshot: it.dress_name_snapshot || 'Unknown',
+              size: it.size || null,
+              quantity: parseInt(it.quantity || 1, 10),
+              rate: parseInt(it.rate || 0, 10),
+              description: it.description || null,
+              attachments: atts,
+              jewellery: hasAtt('jewel') || it.jewellery ? 1 : 0,
+              clutch_purse: hasAtt('clutch') || hasAtt('purse') || it.clutch_purse ? 1 : 0,
+              hand_bag: hasAtt('bag') || it.hand_bag ? 1 : 0,
+              double_dupatta: hasAtt('dupatta') || it.double_dupatta ? 1 : 0,
+              shoes: hasAtt('shoe') || it.shoes ? 1 : 0,
+            };
+          }),
       };
 
       if (editBookingId) {
@@ -1598,13 +1857,13 @@ export default function NewBookingPage() {
                         style={{ fontSize: 12, width: '100%' }} disabled={isViewer} />
                     </div>
 
-                    {/* Accessories */}
-                    <div style={{ paddingLeft: 28, marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <AccessCheck label="Jewellery" checked={it.jewellery} onChange={v => setItem(it._key, 'jewellery', v)} disabled={isViewer} />
-                      <AccessCheck label="Clutch Purse" checked={it.clutch_purse} onChange={v => setItem(it._key, 'clutch_purse', v)} disabled={isViewer} />
-                      <AccessCheck label="Hand Bag" checked={it.hand_bag} onChange={v => setItem(it._key, 'hand_bag', v)} disabled={isViewer} />
-                      <AccessCheck label="Double Dupatta" checked={it.double_dupatta} onChange={v => setItem(it._key, 'double_dupatta', v)} disabled={isViewer} />
-                      <AccessCheck label="Shoes" checked={it.shoes} onChange={v => setItem(it._key, 'shoes', v)} disabled={isViewer} />
+                    {/* Dynamic Accessories / Attachments */}
+                    <div style={{ paddingLeft: 28, marginTop: 10 }}>
+                      <BookingItemAttachments
+                        attachments={it.attachments || []}
+                        onChange={newAtts => setItem(it._key, 'attachments', newAtts)}
+                        disabled={isViewer}
+                      />
                     </div>
                   </div>
                 ))}

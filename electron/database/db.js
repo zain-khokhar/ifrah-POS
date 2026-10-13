@@ -176,6 +176,66 @@ function runMigrations(db) {
     try { db.exec(`ALTER TABLE booking_items ADD COLUMN item_condition TEXT DEFAULT 'OK';`); } catch {}
   }
 
+  // Dress condition & attachments migration
+  if (tableInfo('dresses').length > 0) {
+    if (!hasCol('dresses', 'condition_status')) {
+      try { db.exec(`ALTER TABLE dresses ADD COLUMN condition_status TEXT NOT NULL DEFAULT 'fresh';`); } catch {}
+    }
+    if (!hasCol('dresses', 'attachments')) {
+      try { db.exec(`ALTER TABLE dresses ADD COLUMN attachments TEXT DEFAULT NULL;`); } catch {}
+    }
+  }
+
+  // Ensure dress_maintenance_logs table exists
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS dress_maintenance_logs (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
+        dress_id        INTEGER NOT NULL REFERENCES dresses(id),
+        booking_id      INTEGER REFERENCES bookings(id),
+        status          TEXT    NOT NULL CHECK(status IN ('need_dry_clean','need_repair','fresh','good')),
+        notes           TEXT,
+        photo_path      TEXT,
+        sent_at         TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        completed_at    TEXT    DEFAULT NULL,
+        completed_by    INTEGER REFERENCES users(id),
+        created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        deleted_at      TEXT    DEFAULT NULL,
+        sync_status     TEXT    NOT NULL DEFAULT 'local',
+        last_synced_at  TEXT    DEFAULT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_dress_maintenance_dress ON dress_maintenance_logs(dress_id);
+      CREATE INDEX IF NOT EXISTS idx_dress_maintenance_status ON dress_maintenance_logs(status);
+    `);
+  } catch {}
+
+  // Booking items attachments column migration
+  if (tableInfo('booking_items').length > 0 && !hasCol('booking_items', 'attachments')) {
+    try {
+      db.exec(`ALTER TABLE booking_items ADD COLUMN attachments TEXT DEFAULT NULL;`);
+    } catch {}
+  }
+
+  // Dress attachments learning table
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS dress_attachments (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
+        name            TEXT    NOT NULL,
+        name_normalized TEXT    NOT NULL UNIQUE,
+        created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        deleted_at      TEXT    DEFAULT NULL,
+        sync_status     TEXT    NOT NULL DEFAULT 'local',
+        last_synced_at  TEXT    DEFAULT NULL
+      );
+    `);
+    // Start clean without hardcoded defaults; attachments learn dynamically as user types
+  } catch {}
+
   // Seed default settings if empty
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS settings (

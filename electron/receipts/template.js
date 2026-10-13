@@ -62,6 +62,32 @@ function renderReceiptHtml({ booking, settings = {}, layout = '80mm', isCopy = f
     if (it.hand_bag) accs.push('Hand Bag (ہینڈ بیگ)');
     if (it.double_dupatta) accs.push('2x Dupatta (ڈبل دوپٹہ)');
     if (it.shoes) accs.push('Shoes (جوتے)');
+
+    if (it.attachments) {
+      let custom = [];
+      if (Array.isArray(it.attachments)) {
+        custom = it.attachments;
+      } else {
+        try {
+          const p = JSON.parse(it.attachments);
+          if (Array.isArray(p)) custom = p;
+        } catch (_) {
+          custom = String(it.attachments).split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+      for (const c of custom) {
+        const lower = c.toLowerCase();
+        const isLegacy = (it.jewellery && lower.includes('jewel')) ||
+                         (it.clutch_purse && (lower.includes('clutch') || lower.includes('purse'))) ||
+                         (it.hand_bag && lower.includes('bag')) ||
+                         (it.double_dupatta && lower.includes('dupatta')) ||
+                         (it.shoes && lower.includes('shoe'));
+        if (!isLegacy && !accs.includes(c)) {
+          accs.push(c);
+        }
+      }
+    }
+
     if (accs.length === 0) return '';
     return `<div class="item-accessories"><strong>Acc:</strong> ${accs.map(a => `<span class="acc-badge">${escapeHtml(a)}</span>`).join(' ')}</div>`;
   }

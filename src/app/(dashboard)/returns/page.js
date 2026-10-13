@@ -88,7 +88,7 @@ function ReturnsContent() {
   function openReturnModal(booking) {
     setReturnModalItem(booking);
     setReturnedOn(new Date().toISOString().slice(0, 10));
-    setCondition(booking.return_condition || 'OK');
+    setCondition(booking.return_condition || 'Good');
     setDamageNote(booking.return_damage_note || '');
     setDamagePhoto(booking.return_damage_photo || '');
 
@@ -388,15 +388,15 @@ function ReturnsContent() {
                             <div>
                               <span
                                 className={`badge ${
-                                  r.return_condition === 'Damaged'
+                                  (r.return_condition === 'Need Repair' || r.return_condition === 'Damaged')
                                     ? 'badge-danger'
-                                    : r.return_condition === 'Needs cleaning'
+                                    : (r.return_condition === 'Need Dry Clean' || r.return_condition === 'Needs cleaning')
                                     ? 'badge-warning'
                                     : 'badge-success'
                                 }`}
                                 style={{ fontSize: 11.5 }}
                               >
-                                {r.return_condition || 'OK'}
+                                {r.return_condition || 'Good'}
                               </span>
                               {r.return_damage_note && (
                                 <div style={{ fontSize: 11, color: '#dc2626', marginTop: 3, fontStyle: 'italic' }}>
@@ -549,18 +549,18 @@ function ReturnsContent() {
               />
             </div>
 
-            {/* Condition Choice: OK / Needs cleaning / Damaged */}
+            {/* Condition Choice: Good / Need Dry Clean / Need Repair */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
-                Dress Condition (Halat)
+                Dress Condition (ڈریس کی واپسی حالت)
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                 {[
-                  { id: 'OK', label: '✓ Bilkul Theek (OK)', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
-                  { id: 'Needs cleaning', label: '🧺 Dry-Clean Chahiye', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
-                  { id: 'Damaged', label: '⚠️ Kharab / Damaged', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+                  { id: 'Good', label: '✓ Good (ٹھیک)', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+                  { id: 'Need Dry Clean', label: '🧺 Need Dry Clean (ڈرائی کلین)', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+                  { id: 'Need Repair', label: '⚠️ Need Repair (مرمت / سلائی)', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
                 ].map(c => {
-                  const isSelected = condition === c.id;
+                  const isSelected = condition === c.id || (c.id === 'Good' && condition === 'OK') || (c.id === 'Need Dry Clean' && condition === 'Needs cleaning') || (c.id === 'Need Repair' && condition === 'Damaged');
                   return (
                     <button
                       key={c.id}
@@ -587,15 +587,15 @@ function ReturnsContent() {
             </div>
 
             {/* Damage / Cleaning Note */}
-            {(condition === 'Damaged' || condition === 'Needs cleaning') && (
-              <div style={{ marginBottom: 16, background: condition === 'Damaged' ? '#fef2f2' : '#fffbeb', padding: 12, borderRadius: 8, border: `1px solid ${condition === 'Damaged' ? '#fecaca' : '#fde68a'}` }}>
-                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: condition === 'Damaged' ? '#991b1b' : '#92400e', marginBottom: 5 }}>
-                  {condition === 'Damaged' ? 'Kharabi ki Tafseel (Damage Note - Required)' : 'Cleaning Note'}
+            {(condition === 'Need Repair' || condition === 'Damaged' || condition === 'Need Dry Clean' || condition === 'Needs cleaning') && (
+              <div style={{ marginBottom: 16, background: (condition === 'Need Repair' || condition === 'Damaged') ? '#fef2f2' : '#fffbeb', padding: 12, borderRadius: 8, border: `1px solid ${(condition === 'Need Repair' || condition === 'Damaged') ? '#fecaca' : '#fde68a'}` }}>
+                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: (condition === 'Need Repair' || condition === 'Damaged') ? '#991b1b' : '#92400e', marginBottom: 5 }}>
+                  {(condition === 'Need Repair' || condition === 'Damaged') ? 'Kharabi / Marammat ki Tafseel (Repair Note - Required)' : 'Dry-Clean / Cleaning Note'}
                 </label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder={condition === 'Damaged' ? 'e.g. Dupatta torn from corner, stain on sleeve...' : 'e.g. Mild stain on border, needs urgent dry clean'}
+                  placeholder={(condition === 'Need Repair' || condition === 'Damaged') ? 'e.g. Dupatta torn, zipper broken, stain on sleeve...' : 'e.g. Mild stain on border, needs dry clean'}
                   value={damageNote}
                   onChange={e => setDamageNote(e.target.value)}
                   autoFocus

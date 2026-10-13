@@ -681,6 +681,62 @@ function ReportsContent() {
                               );
                             }
 
+                            if (col.key === 'item_condition') {
+                              const isCleaning = row.section === 'CLEANING';
+                              const condText = val || row.item_condition || '—';
+                              const condLower = String(condText).toLowerCase();
+                              const isDamaged = condLower.includes('repair') || condLower.includes('damag');
+                              const isClean = condLower.includes('clean');
+                              return (
+                                <td key={col.key} style={{ fontSize: 12 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      padding: '2px 7px',
+                                      borderRadius: 4,
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      background: isDamaged ? '#fee2e2' : isClean ? '#fef3c7' : '#f1f5f9',
+                                      color: isDamaged ? '#dc2626' : isClean ? '#b45309' : '#475569',
+                                      border: `1px solid ${isDamaged ? '#fecaca' : isClean ? '#fde68a' : '#e2e8f0'}`
+                                    }}>
+                                      {isDamaged ? '⚠️ ' : isClean ? '🧺 ' : ''}{condText}
+                                    </span>
+                                    {row.notes && (
+                                      <div style={{ fontSize: 10.5, color: '#64748b', fontStyle: 'italic', width: '100%' }}>
+                                        {row.notes}
+                                      </div>
+                                    )}
+                                    {isCleaning && row.dress_id && userRole !== 'viewer' && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        style={{
+                                          fontSize: 11,
+                                          padding: '2px 8px',
+                                          color: '#15803d',
+                                          background: '#f0fdf4',
+                                          borderColor: '#bbf7d0',
+                                          fontWeight: 700,
+                                          marginTop: 2,
+                                        }}
+                                        onClick={async () => {
+                                          const res = await window.electronAPI?.dresses?.updateCondition(row.dress_id, 'good', 'Marked ready from dry-clean report');
+                                          if (res?.ok && reloadRef.current) {
+                                            reloadRef.current();
+                                          }
+                                        }}
+                                        title="Dress tayar hai (Mark as Ready/Good)"
+                                      >
+                                        ✓ Mark Ready
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              );
+                            }
+
                             if (col.key === 'status_label' && row.is_overdue) {
                               return (
                                 <td key={col.key}>

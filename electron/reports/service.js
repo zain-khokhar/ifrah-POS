@@ -407,19 +407,26 @@ function createReportsService(db, settingsService) {
         'Returned Needing Dry-Clean / Repair' AS section_name,
         b.booking_no, b.returned_on AS date_target,
         cu.name AS customer_name, cu.phone AS customer_phone,
-        bi.id AS item_id, bi.dress_name_snapshot, bi.size,
+        bi.id AS item_id, bi.dress_id, bi.dress_name_snapshot, bi.size,
         bi.jewellery, bi.clutch_purse, bi.hand_bag, bi.double_dupatta, bi.shoes,
         bi.is_ready,
-        COALESCE(b.return_condition, bi.item_condition, 'Needs cleaning') AS item_condition,
+        COALESCE(b.return_condition, bi.item_condition, 'Need Dry Clean') AS item_condition,
         b.return_damage_note AS notes,
-        b.remaining
+        b.remaining,
+        d.condition_status AS dress_condition_status
       FROM booking_items bi
       JOIN bookings b ON b.id = bi.booking_id
       LEFT JOIN customers cu ON cu.id = b.customer_id
+      LEFT JOIN dresses d ON d.id = bi.dress_id
       WHERE b.deleted_at IS NULL
         AND bi.deleted_at IS NULL
         AND b.returned_on IS NOT NULL
-        AND (b.return_condition IN ('Needs cleaning', 'Damaged') OR bi.item_condition IN ('Needs cleaning', 'Damaged'))
+        AND (
+          b.return_condition IN ('Need Dry Clean', 'Need Repair', 'Needs cleaning', 'Damaged')
+          OR bi.item_condition IN ('Need Dry Clean', 'Need Repair', 'Needs cleaning', 'Damaged')
+          OR d.condition_status IN ('need_dry_clean', 'need_repair')
+        )
+        AND (d.condition_status IS NULL OR d.condition_status IN ('need_dry_clean', 'need_repair'))
       ORDER BY b.returned_on DESC, b.booking_no ASC
     `).all();
 

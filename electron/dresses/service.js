@@ -27,7 +27,7 @@ function createDressesService(db, app) {
   }
 
   // ─── LIST ────────────────────────────────────────────────────────────────
-  function list(session, { search = '', categoryId = null, activeOnly = false } = {}) {
+  function list(session, { search = '', categoryId = null, activeOnly = false, conditionStatus = null } = {}) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
 
     const conditions = ['d.deleted_at IS NULL'];
@@ -40,6 +40,7 @@ function createDressesService(db, app) {
     }
     if (categoryId) { conditions.push('d.category_id = ?'); params.push(categoryId); }
     if (activeOnly) { conditions.push('d.active = 1'); }
+    if (conditionStatus) { conditions.push('d.condition_status = ?'); params.push(conditionStatus); }
 
     const where = conditions.join(' AND ');
 
@@ -47,6 +48,8 @@ function createDressesService(db, app) {
       SELECT
         d.id, d.code, d.name, d.size, d.rental_price, d.description,
         d.photo_path, d.active,
+        COALESCE(d.condition_status, 'fresh') AS condition_status,
+        d.attachments,
         d.category_id, dc.name AS category,
         d.created_at, d.updated_at,
         (SELECT COUNT(*) FROM booking_items bi
@@ -134,13 +137,20 @@ function createDressesService(db, app) {
 
     const photoPath = copyPhoto(input.photo_source_path, app);
 
+    const conditionStatus = ['fresh', 'good', 'need_dry_clean', 'need_repair'].includes(input.condition_status)
+      ? input.condition_status
+      : 'fresh';
+    const attachments = Array.isArray(input.attachments)
+      ? JSON.stringify(input.attachments.map(s => String(s).trim()).filter(Boolean))
+      : (typeof input.attachments === 'string' && input.attachments.trim() ? input.attachments.trim() : null);
+
     const result = withAudit(db, user, 'dress.create', 'dresses',
       r => r.lastInsertRowid,
-      { newValues: { code, name, rental_price: rentalPrice, category_id: num(input.category_id) } },
+      { newValues: { code, name, rental_price: rentalPrice, category_id: num(input.category_id), condition_status: conditionStatus, attachments } },
       () => db.prepare(`
         INSERT INTO dresses
-          (code, name, category_id, size, rental_price, description, photo_path, created_by, updated_by)
-        VALUES (?,?,?,?,?,?,?,?,?)
+          (code, name, category_id, size, rental_price, description, photo_path, condition_status, attachments, created_by, updated_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
       `).run(
         code, name,
         num(input.category_id),
@@ -148,6 +158,8 @@ function createDressesService(db, app) {
         rentalPrice,
         str(input.description),
         photoPath,
+        conditionStatus,
+        attachments,
         user.id, user.id,
       )
     );
@@ -166,7 +178,7 @@ function createDressesService(db, app) {
     if (!name) throw new Error('Dress name is required.');
 
     // Only owner can change rental_price
-    const rentalPrice = parsePrice(input.rental_price);
+    const rentalPrice = input.rental_price !== undefined ? parsePrice(input.rental_price) : old.rental_price;
     if (rentalPrice !== old.rental_price && user.role !== ROLES.OWNER) {
       throw new Error('Sirf Owner rental price badal sakta hai.');
     }
@@ -177,21 +189,126 @@ function createDressesService(db, app) {
       photoPath = copyPhoto(input.photo_source_path, app);
     }
 
+    const categoryId = input.category_id !== undefined ? num(input.category_id) : old.category_id;
+    const size = input.size !== undefined ? str(input.size) : old.size;
+    const description = input.description !== undefined ? str(input.description) : old.description;
+
+    const conditionStatus = ['fresh', 'good', 'need_dry_clean', 'need_repair'].includes(input.condition_status)
+      ? input.condition_status
+      : (old.condition_status || 'fresh');
+    const attachments = input.attachments !== undefined
+      ? (Array.isArray(input.attachments)
+          ? JSON.stringify(input.attachments.map(s => String(s).trim()).filter(Boolean))
+          : (typeof input.attachments === 'string' && input.attachments.trim() ? input.attachments.trim() : null))
+      : old.attachments;
+
     withAudit(db, user, 'dress.update', 'dresses', id,
-      { oldValues: { name: old.name, rental_price: old.rental_price, category_id: old.category_id },
-        newValues: { name, rental_price: rentalPrice, category_id: num(input.category_id) } },
+      { oldValues: { name: old.name, rental_price: old.rental_price, category_id: old.category_id, condition_status: old.condition_status, attachments: old.attachments },
+        newValues: { name, rental_price: rentalPrice, category_id: categoryId, condition_status: conditionStatus, attachments } },
       () => db.prepare(`
         UPDATE dresses SET
           name = ?, category_id = ?, size = ?, rental_price = ?,
-          description = ?, photo_path = ?, updated_by = ?,
+          description = ?, photo_path = ?, condition_status = ?, attachments = ?, updated_by = ?,
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
         WHERE id = ? AND deleted_at IS NULL
       `).run(
-        name, num(input.category_id), str(input.size), rentalPrice,
-        str(input.description), photoPath, user.id, id,
+        name, categoryId, size, rentalPrice,
+        description, photoPath, conditionStatus, attachments, user.id, id,
       )
     );
     return { ok: true };
+  }
+
+  // ─── UPDATE CONDITION STATUS ──────────────────────────────────────────────
+  function updateCondition(session, id, newStatus = 'fresh', notes = null) {
+    requireRole(session, [ROLES.OWNER, ROLES.CASHIER]);
+    const user = session?.user || session;
+    const old = get(session, id);
+    if (!old) throw new Error('Dress nahi mila.');
+
+    const validStatus = ['fresh', 'good', 'need_dry_clean', 'need_repair'].includes(newStatus)
+      ? newStatus
+      : 'fresh';
+
+    return withAudit(db, user, 'dress.condition_update', 'dresses', id,
+      { oldValues: { condition_status: old.condition_status }, newValues: { condition_status: validStatus, notes } },
+      () => {
+        db.prepare(`
+          UPDATE dresses SET
+            condition_status = ?,
+            updated_by = ?,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+          WHERE id = ? AND deleted_at IS NULL
+        `).run(validStatus, user.id, id);
+
+        if (validStatus === 'fresh' || validStatus === 'good') {
+          db.prepare(`
+            UPDATE dress_maintenance_logs
+            SET completed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+                completed_by = ?,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE dress_id = ? AND completed_at IS NULL
+          `).run(user.id, id);
+        } else {
+          db.prepare(`
+            INSERT INTO dress_maintenance_logs (
+              dress_id, status, notes, sent_at
+            ) VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+          `).run(id, validStatus, notes || 'Manual condition change');
+        }
+
+        return { ok: true, id, condition_status: validStatus };
+      }
+    );
+  }
+
+  // ─── LIST MAINTENANCE (Dry Clean & Repair Queue) ──────────────────────────
+  function listMaintenance(session, { status = 'all', search = '' } = {}) {
+    requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
+
+    const conditions = ["d.deleted_at IS NULL", "d.condition_status IN ('need_dry_clean', 'need_repair')"];
+    const params = [];
+
+    if (status === 'need_dry_clean' || status === 'need_repair') {
+      conditions.push('d.condition_status = ?');
+      params.push(status);
+    }
+
+    if (search && search.trim()) {
+      const q = `%${search.trim()}%`;
+      conditions.push('(d.name LIKE ? OR d.code LIKE ? OR dc.name LIKE ?)');
+      params.push(q, q, q);
+    }
+
+    const where = conditions.join(' AND ');
+
+    return db.prepare(`
+      SELECT
+        d.id, d.id AS dress_id, d.code, d.name, d.size, d.rental_price, d.photo_path,
+        d.condition_status, d.attachments, dc.name AS category,
+        dml.id AS maintenance_id,
+        dml.status,
+        dml.status AS maintenance_status,
+        dml.notes,
+        dml.notes AS maintenance_notes,
+        dml.sent_at,
+        dml.booking_id,
+        b.booking_no,
+        cu.name AS customer_name,
+        cu.phone AS customer_phone
+      FROM dresses d
+      LEFT JOIN dress_categories dc ON dc.id = d.category_id
+      LEFT JOIN (
+        SELECT * FROM dress_maintenance_logs
+        WHERE id IN (
+          SELECT MAX(id) FROM dress_maintenance_logs GROUP BY dress_id
+        )
+      ) dml ON dml.dress_id = d.id
+      LEFT JOIN bookings b ON b.id = dml.booking_id
+      LEFT JOIN customers cu ON cu.id = b.customer_id
+      WHERE ${where}
+      ORDER BY dml.sent_at DESC, d.name ASC
+    `).all(...params);
   }
 
   // ─── TOGGLE ACTIVE (deactivate / reactivate) ─────────────────────────────
@@ -307,7 +424,7 @@ function createDressesService(db, app) {
     };
   }
 
-  return { list, get, suggestSimilar, nextCode, create, update, setActive, quickAdd, getHistory };
+  return { list, get, suggestSimilar, nextCode, create, update, setActive, quickAdd, getHistory, updateCondition, listMaintenance };
 }
 
 module.exports = { createDressesService };

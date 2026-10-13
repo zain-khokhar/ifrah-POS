@@ -401,6 +401,8 @@ ipcMain.handle('dresses:update',        safeHandler((event, id, inp) => dresses.
 ipcMain.handle('dresses:setActive',     safeHandler((event, id, act) => dresses.setActive(getSession(event), id, act)));
 ipcMain.handle('dresses:quickAdd',      safeHandler((event, name)    => ({ ok: true, ...dresses.quickAdd(getSession(event), name) })));
 ipcMain.handle('dresses:history',       safeHandler((event, id, flt) => ({ ok: true, data: dresses.getHistory(getSession(event), id, flt) })));
+ipcMain.handle('dresses:updateCondition', safeHandler((event, id, st, notes) => dresses.updateCondition(getSession(event), id, st, notes)));
+ipcMain.handle('dresses:listMaintenance', safeHandler((event, filters) => ({ ok: true, data: dresses.listMaintenance(getSession(event), filters) })));
 
 // ─── IPC — Bookings ────────────────────────────────────────────────────────
 ipcMain.handle('bookings:list',        safeHandler((event, filters)   => ({ ok: true, data: bookings.list(getSession(event), filters) })));
