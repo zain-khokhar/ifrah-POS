@@ -162,6 +162,8 @@ const SCHEMA_STATEMENTS = [
     condition_status TEXT   NOT NULL DEFAULT 'fresh'
                     CHECK(condition_status IN ('fresh','good','need_dry_clean','need_repair')),
     attachments     TEXT    DEFAULT NULL,                -- JSON array of accessories
+    inactive_remark TEXT    DEFAULT NULL,
+    inactive_at     TEXT    DEFAULT NULL,
     created_by      INTEGER REFERENCES users(id),
     updated_by      INTEGER REFERENCES users(id),
     created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -239,6 +241,8 @@ const SCHEMA_STATEMENTS = [
     attachments         TEXT DEFAULT NULL,
     is_ready            INTEGER NOT NULL DEFAULT 0,       -- Phase 9 night-before preparation tick
     item_condition      TEXT DEFAULT 'OK',                -- Phase 9 item condition
+    return_note         TEXT DEFAULT NULL,
+    return_qty          INTEGER DEFAULT NULL,
     created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     updated_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     deleted_at          TEXT    DEFAULT NULL,

@@ -317,7 +317,7 @@ function createReportsService(db, settingsService) {
 
       const statusDisplayText = isDelivered
         ? 'Delivered'
-        : (isFullyReady ? 'Fully Ready' : 'Pending Ready');
+        : (isFullyReady ? 'Fully Ready' : 'Pending');
 
       // HTML representations for PDF
       const bookingDisplayHtml = `
