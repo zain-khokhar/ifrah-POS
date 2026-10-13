@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import ReceiptModal from '@/components/ReceiptModal';
 import { formatPakPhone, cnicMask, validateCustomer } from '@/lib/customerValidation';
+import ActionMenu from '@/lib/ActionMenu.js/actionMenu';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function emptyForm() {
@@ -21,10 +22,10 @@ function emptyForm() {
 
 // ─── Learning Combobox ───────────────────────────────────────────────────────
 function LearningCombobox({ tableName, value, onChange, placeholder, disabled }) {
-  const [options, setOptions]     = useState([]);
-  const [query,   setQuery]       = useState('');
-  const [open,    setOpen]        = useState(false);
-  const [adding,  setAdding]      = useState(false);
+  const [options, setOptions] = useState([]);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -153,11 +154,11 @@ function CustomerModal({ editCustomer, onClose, onSaved, userRole }) {
     cast_id: editCustomer.cast_id || '',
     address: editCustomer.address || '', notes: editCustomer.notes || '',
   } : emptyForm());
-  const [dupWarning,   setDupWarning]   = useState(null);
-  const [dupChecked,   setDupChecked]   = useState(false);
-  const [saving,       setSaving]       = useState(false);
-  const [error,        setError]        = useState('');
-  const [fieldErrors,  setFieldErrors]  = useState({});
+  const [dupWarning, setDupWarning] = useState(null);
+  const [dupChecked, setDupChecked] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const handleFieldChange = (key, val) => {
     let finalVal = val;
@@ -507,12 +508,12 @@ const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#6
 // ─── Status Badge ────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
   const map = {
-    None:      { cls: 'badge-gray',    label: 'None' },
-    Open:      { cls: 'badge-info',    label: 'Open' },
-    Pending:   { cls: 'badge-warning', label: 'Pending' },
+    None: { cls: 'badge-gray', label: 'None' },
+    Open: { cls: 'badge-info', label: 'Open' },
+    Pending: { cls: 'badge-warning', label: 'Pending' },
     Delivered: { cls: 'badge-success', label: 'Delivered' },
-    Returned:  { cls: 'badge-gray',    label: 'Returned' },
-    Closed:    { cls: 'badge-success', label: 'Closed' },
+    Returned: { cls: 'badge-gray', label: 'Returned' },
+    Closed: { cls: 'badge-success', label: 'Closed' },
   };
   const s = map[status] || map.None;
   return (
@@ -524,11 +525,11 @@ function StatusBadge({ status }) {
 
 // ─── Customer Bookings History Modal ──────────────────────────────────────────
 function CustomerBookingsModal({ customer, onClose, onSelectBookingReceipt }) {
-  const [data, setData]             = useState(null);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState('');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [search, setSearch]         = useState('');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (!customer?.id) return;
@@ -546,7 +547,7 @@ function CustomerBookingsModal({ customer, onClose, onSelectBookingReceipt }) {
           if (res?.ok && res.data) {
             loadedData = res.data;
           }
-        } catch (e) {}
+        } catch (e) { }
 
         // 2. Try customer history IPC
         if (!loadedData) {
@@ -555,7 +556,7 @@ function CustomerBookingsModal({ customer, onClose, onSelectBookingReceipt }) {
             if (res2?.ok && res2.data) {
               loadedData = res2.data;
             }
-          } catch (e) {}
+          } catch (e) { }
         }
 
         // 3. Robust client-side fallback via bookings.list
@@ -593,7 +594,7 @@ function CustomerBookingsModal({ customer, onClose, onSelectBookingReceipt }) {
                     items: full.data.items || [],
                   };
                 }
-              } catch (e) {}
+              } catch (e) { }
               return b;
             })
           );
@@ -649,8 +650,8 @@ function CustomerBookingsModal({ customer, onClose, onSelectBookingReceipt }) {
 
   // Calculate summary metrics
   const totalAmount = rawBookings.reduce((sum, b) => sum + (b.grand_total || 0), 0);
-  const totalPaid   = rawBookings.reduce((sum, b) => sum + (b.amount_paid || 0), 0);
-  const totalDue    = rawBookings.reduce((sum, b) => sum + (b.remaining || 0), 0);
+  const totalPaid = rawBookings.reduce((sum, b) => sum + (b.amount_paid || 0), 0);
+  const totalDue = rawBookings.reduce((sum, b) => sum + (b.remaining || 0), 0);
 
   const statusCounts = {
     all: rawBookings.length,
@@ -780,11 +781,11 @@ function CustomerBookingsModal({ customer, onClose, onSelectBookingReceipt }) {
           {/* Status Filter Pills */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {[
-              { id: 'all',       label: `All (${statusCounts.all})` },
-              { id: 'open',      label: `Open (${statusCounts.open})` },
-              { id: 'pending',   label: `Pending (${statusCounts.pending})` },
+              { id: 'all', label: `All (${statusCounts.all})` },
+              { id: 'open', label: `Open (${statusCounts.open})` },
+              { id: 'pending', label: `Pending (${statusCounts.pending})` },
               { id: 'delivered', label: `Delivered (${statusCounts.delivered})` },
-              { id: 'closed',    label: `Closed (${statusCounts.closed})` },
+              { id: 'closed', label: `Closed (${statusCounts.closed})` },
             ].map(f => (
               <button
                 key={f.id}
@@ -976,19 +977,19 @@ function CustomerBookingsModal({ customer, onClose, onSelectBookingReceipt }) {
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function CustomersPage() {
   const [customers, setCustomers] = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [search,    setSearch]    = useState('');
-  const [cityId,    setCityId]    = useState('');
-  const [castId,    setCastId]    = useState('');
-  const [cities,    setCities]    = useState([]);
-  const [casts,     setCasts]     = useState([]);
-  const [modal,     setModal]     = useState(null);  // null | 'new' | customer-object
-  const [userRole,  setUserRole]  = useState('viewer');
-  const [deleting,  setDeleting]  = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [cityId, setCityId] = useState('');
+  const [castId, setCastId] = useState('');
+  const [cities, setCities] = useState([]);
+  const [casts, setCasts] = useState([]);
+  const [modal, setModal] = useState(null);  // null | 'new' | customer-object
+  const [userRole, setUserRole] = useState('viewer');
+  const [deleting, setDeleting] = useState(null);
 
   // Customer Bookings History & Receipt Modal state
-  const [historyCustomer,  setHistoryCustomer]  = useState(null);
-  const [printBookingId,   setPrintBookingId]   = useState(null);
+  const [historyCustomer, setHistoryCustomer] = useState(null);
+  const [printBookingId, setPrintBookingId] = useState(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
 
   // Get current user role
@@ -1004,7 +1005,7 @@ export default function CustomersPage() {
         window.electronAPI?.lists.get('cities'),
         window.electronAPI?.lists.get('casts'),
       ]);
-      if (c?.ok)  setCities(c.data);
+      if (c?.ok) setCities(c.data);
       if (ca?.ok) setCasts(ca.data);
     }
     fetchLists();
@@ -1041,8 +1042,8 @@ export default function CustomersPage() {
     setDeleting(null);
   }
 
-  const isOwner   = userRole === 'owner';
-  const isViewer  = userRole === 'viewer';
+  const isOwner = userRole === 'owner';
+  const isViewer = userRole === 'viewer';
 
   return (
     <div>
@@ -1172,38 +1173,34 @@ export default function CustomersPage() {
                         {c.booking_count}
                       </span>
                     </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          style={{
-                            color: '#7c3aed',
-                            borderColor: '#ddd6fe',
-                            background: '#f5f3ff',
-                            fontWeight: 600,
-                            fontSize: 12
-                          }}
-                          onClick={() => setHistoryCustomer(c)}
-                          title="Is customer ki bookings dekhein"
-                        >
-                          <History size={12} /> Bookings
-                        </button>
-                        {!isViewer && (
-                          <button className="btn btn-secondary btn-sm" onClick={() => setModal(c)}>
-                            <Edit size={12} /> Edit
-                          </button>
-                        )}
-                        {isOwner && (
-                          <button
-                            className="btn btn-secondary btn-sm"
-                            style={{ color: '#ef4444' }}
-                            onClick={() => handleDelete(c)}
-                            disabled={deleting === c.id}
-                          >
-                            {deleting === c.id ? '...' : <><Trash2 size={12} /> Delete</>}
-                          </button>
-                        )}
+                    {/* Actions */}
+                    <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        <ActionMenu
+                          items={[
+                            {
+                              key: 'bookings',
+                              label: 'Bookings',
+                              icon: <History size={13} />,
+                              color: '#7c3aed',
+                              onClick: () => setHistoryCustomer(c),
+                            },
+                            !isViewer && {
+                              key: 'edit',
+                              label: 'Edit',
+                              icon: <Edit size={13} />,
+                              onClick: () => setModal(c),
+                            },
+                            isOwner && {
+                              key: 'delete',
+                              label: deleting === c.id ? 'Deleting...' : 'Delete',
+                              icon: <Trash2 size={13} />,
+                              color: '#ef4444',
+                              disabled: deleting === c.id,
+                              onClick: () => handleDelete(c),
+                            },
+                          ].filter(Boolean)}
+                        />
                       </div>
                     </td>
                   </tr>

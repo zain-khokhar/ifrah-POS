@@ -64,7 +64,7 @@ function createBookingsService(db) {
   // ─── LIST ─────────────────────────────────────────────────────────────────
   function list(session, {
     search = '', status = '', cityId = null, customerId = null,
-    dateFrom = null, dateTo = null, limit = 200, offset = 0,
+    dateField = 'booking_date', dateFrom = null, dateTo = null, limit = 500, offset = 0,
   } = {}) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
 
@@ -84,8 +84,15 @@ function createBookingsService(db) {
     if (status)     { conditions.push('b.status = ?'); params.push(status); }
     if (cityId)     { conditions.push('b.city_id = ?'); params.push(cityId); }
     if (customerId) { conditions.push('b.customer_id = ?'); params.push(customerId); }
-    if (dateFrom)   { conditions.push('b.delivery_date >= ?'); params.push(dateFrom); }
-    if (dateTo)     { conditions.push('b.delivery_date <= ?'); params.push(dateTo); }
+
+    const colExpr = dateField === 'delivery_date'
+      ? 'b.delivery_date'
+      : dateField === 'returning_date'
+      ? 'b.returning_date'
+      : 'COALESCE(b.booking_date, substr(b.created_at, 1, 10))';
+
+    if (dateFrom)   { conditions.push(`${colExpr} >= ?`); params.push(dateFrom); }
+    if (dateTo)     { conditions.push(`${colExpr} <= ?`); params.push(dateTo); }
 
     const where = conditions.join(' AND ');
 
@@ -97,10 +104,11 @@ function createBookingsService(db) {
         b.booking_month, b.total_returning_days,
         b.grand_total, b.amount_paid, b.remaining,
         b.discount, b.security_deposit, b.notes,
+        b.clash_flag,
         cu.id   AS customer_id, cu.name AS customer_name,
         cu.phone AS customer_phone, cu.cnic AS customer_cnic,
         ci.name AS city,
-        (SELECT group_concat(dress_name_snapshot, ', ') FROM booking_items WHERE booking_id = b.id AND deleted_at IS NULL) AS dresses_summary,
+        (SELECT group_concat(dress_name_snapshot || ' x' || COALESCE(quantity, 1), ', ') FROM booking_items WHERE booking_id = b.id AND deleted_at IS NULL) AS dresses_summary,
         b.created_at, b.updated_at,
         ub.full_name AS updated_by_name
       FROM bookings b

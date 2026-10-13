@@ -821,6 +821,145 @@ function createReportsService(db, settingsService) {
     };
   }
 
+  // ─── 3d. BOOKINGS REPORT (mirrors Bookings page filters) ───────────────────
+  function getBookingsReport(session, {
+    search = '',
+    status = '',
+    dateField = 'booking_date',
+    dateFrom = null,
+    dateTo = null,
+  } = {}) {
+    requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
+
+    const conditions = ['b.deleted_at IS NULL'];
+    const params = [];
+    const parts = [];
+
+    if (search && search.trim()) {
+      const q = `%${search.trim()}%`;
+      conditions.push(`(
+        CAST(b.booking_no AS TEXT) LIKE ?
+        OR cu.name LIKE ? OR cu.phone LIKE ? OR cu.cnic LIKE ?
+        OR b.relative_name LIKE ?
+      )`);
+      params.push(q, q, q, q, q);
+      parts.push(`Search: "${search.trim()}"`);
+    }
+
+    if (status) {
+      conditions.push('b.status = ?');
+      params.push(status);
+      parts.push(`Status: ${status}`);
+    }
+
+    const fieldLabels = {
+      booking_date: 'Booking Date',
+      delivery_date: 'Delivery Date',
+      returning_date: 'Return Date',
+    };
+    const colExpr = dateField === 'delivery_date'
+      ? 'b.delivery_date'
+      : dateField === 'returning_date'
+      ? 'b.returning_date'
+      : 'COALESCE(b.booking_date, substr(b.created_at, 1, 10))';
+
+    if (dateFrom && dateTo && dateFrom === dateTo) {
+      conditions.push(`${colExpr} = ?`);
+      params.push(dateFrom);
+      parts.push(`${fieldLabels[dateField] || 'Date'}: ${dateFrom}`);
+    } else {
+      if (dateFrom) {
+        conditions.push(`${colExpr} >= ?`);
+        params.push(dateFrom);
+      }
+      if (dateTo) {
+        conditions.push(`${colExpr} <= ?`);
+        params.push(dateTo);
+      }
+      if (dateFrom && dateTo) {
+        parts.push(`${fieldLabels[dateField] || 'Date'}: ${dateFrom} to ${dateTo}`);
+      } else if (dateFrom) {
+        parts.push(`${fieldLabels[dateField] || 'Date'}: From ${dateFrom}`);
+      } else if (dateTo) {
+        parts.push(`${fieldLabels[dateField] || 'Date'}: Upto ${dateTo}`);
+      }
+    }
+
+    const where = conditions.join(' AND ');
+
+    const rows = db.prepare(`
+      SELECT
+        b.id, b.booking_no, b.status,
+        b.booking_date, b.delivery_date, b.returning_date,
+        b.delivered_on, b.returned_on,
+        b.grand_total, b.amount_paid, b.remaining,
+        cu.name AS customer_name, cu.phone AS customer_phone,
+        (SELECT group_concat(dress_name_snapshot || ' x' || COALESCE(quantity, 1), ', ') FROM booking_items WHERE booking_id = b.id AND deleted_at IS NULL) AS dresses_summary,
+        b.created_at
+      FROM bookings b
+      LEFT JOIN customers cu ON cu.id = b.customer_id
+      WHERE ${where}
+      ORDER BY b.booking_no DESC
+    `).all(...params);
+
+    const enriched = rows.map(r => {
+      let timeStr = '';
+      if (r.created_at) {
+        try {
+          const d = new Date(r.created_at);
+          if (!isNaN(d.getTime())) {
+            timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+          }
+        } catch (e) {}
+      }
+      const bDate = r.booking_date || (r.created_at ? r.created_at.slice(0, 10) : '—');
+      const bookedAt = timeStr ? `${bDate} ${timeStr}` : bDate;
+
+      return {
+        ...r,
+        customer_name: r.customer_name || '—',
+        customer_phone: r.customer_phone || '—',
+        dresses_summary: r.dresses_summary || '—',
+        booked_at: bookedAt,
+        delivery_date: r.delivery_date || '—',
+        returning_date: r.returning_date || '—',
+        status: r.status || 'None',
+      };
+    });
+
+    const totalGrand = enriched.reduce((s, r) => s + (r.grand_total || 0), 0);
+    const totalPaid = enriched.reduce((s, r) => s + (r.amount_paid || 0), 0);
+    const totalRemaining = enriched.reduce((s, r) => s + (r.remaining || 0), 0);
+
+    return {
+      reportType: 'bookings_report',
+      title: 'Bookings Report (بکنگز رپورٹ)',
+      subtitle: `${enriched.length} bookings`,
+      filtersSummary: parts.length ? parts.join(' • ') : 'All Bookings',
+      orientation: 'landscape',
+      columns: [
+        { header: 'Booking #', key: 'booking_no', isNum: true, width: 12 },
+        { header: 'Customer', key: 'customer_name', width: 22 },
+        { header: 'Phone', key: 'customer_phone', isText: true, width: 15 },
+        { header: 'Dresses / Ordered', key: 'dresses_summary', width: 34 },
+        { header: 'Booked Date & Time', key: 'booked_at', width: 20 },
+        { header: 'Delivery Date', key: 'delivery_date', width: 14 },
+        { header: 'Return Date', key: 'returning_date', width: 14 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Total (Rs)', key: 'grand_total', isMoney: true, width: 14 },
+        { header: 'Paid (Rs)', key: 'amount_paid', isMoney: true, width: 14 },
+        { header: 'Remaining (Rs)', key: 'remaining', isMoney: true, width: 14 },
+      ],
+      rows: enriched,
+      totals: {
+        booking_no: `${enriched.length} Bookings`,
+        grand_total: totalGrand,
+        amount_paid: totalPaid,
+        remaining: totalRemaining,
+      },
+    };
+  }
+
   // ─── 4. CUSTOMER REPORT (BDRCustomer Replacement) ─────────────────────────
   function getCustomerReport(session, { month = '', cityId = null, status = '', dateFrom = '', dateTo = '' } = {}) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
@@ -1365,6 +1504,8 @@ function createReportsService(db, settingsService) {
         return getReturnsTracker(session, filters);
       case 'dress_catalogue':
         return getDressCatalogue(session, filters);
+      case 'bookings_report':
+        return getBookingsReport(session, filters);
       case 'customer_report':
         return getCustomerReport(session, filters);
       case 'customers_month':
@@ -1605,6 +1746,9 @@ function createReportsService(db, settingsService) {
     getDeliverySheet,
     getPrepareDryCleanList,
     getReturnsDueAndOverdue,
+    getReturnsTracker,
+    getDressCatalogue,
+    getBookingsReport,
     getCustomerReport,
     getCustomersThisMonth,
     getTodayOpenAccounts,
