@@ -138,11 +138,11 @@ async function buildExcelReport({ title, subtitle = '', columns, rows, totals = 
       } else if (colDef?.isNum) {
         cell.numFmt = '#,##0';
         cell.alignment = { vertical: 'top', horizontal: 'center', wrapText: true };
-      } else if (colDef?.isText || colDef?.key.includes('phone') || colDef?.key.includes('cnic')) {
+      } else if (colDef?.isText || colDef?.key.includes('phone') || colDef?.key.includes('cnic') || colDef?.key.includes('date') || colDef?.key === 'booked_at' || colDef?.key === 'paid_on') {
         cell.numFmt = '@'; // Force text format
         cell.alignment = {
           vertical: 'top',
-          horizontal: colDef?.align === 'right' ? 'right' : colDef?.align === 'center' ? 'center' : 'left',
+          horizontal: colDef?.align === 'right' ? 'right' : colDef?.align === 'center' ? 'center' : (colDef?.key.includes('date') || colDef?.key === 'booked_at' || colDef?.key === 'paid_on') ? 'center' : 'left',
           wrapText: true,
         };
       } else {

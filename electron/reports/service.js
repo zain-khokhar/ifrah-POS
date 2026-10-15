@@ -52,10 +52,76 @@ function createReportsService(db, settingsService) {
     return d.toISOString().slice(0, 10);
   }
 
+  function formatDateDDMMYYYY(val) {
+    if (!val) return null;
+    try {
+      if (val instanceof Date) {
+        if (isNaN(val.getTime())) return null;
+        const d = String(val.getDate()).padStart(2, '0');
+        const m = String(val.getMonth() + 1).padStart(2, '0');
+        const y = val.getFullYear();
+        return `${d}-${m}-${y}`;
+      }
+      const s = String(val).trim();
+      if (!s) return null;
+      const dateOnly = s.split('T')[0].split(' ')[0];
+      const parts = dateOnly.split('-');
+      if (parts.length === 3) {
+        if (parts[0].length === 4 && parts[1].length <= 2 && parts[2].length <= 2) {
+          return `${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[0]}`;
+        }
+        if (parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 4) {
+          return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[2]}`;
+        }
+      }
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        const dStr = String(d.getDate()).padStart(2, '0');
+        const mStr = String(d.getMonth() + 1).padStart(2, '0');
+        return `${dStr}-${mStr}-${d.getFullYear()}`;
+      }
+      return s;
+    } catch {
+      return null;
+    }
+  }
+
+  function parseDate(val) {
+    if (!val) return null;
+    if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+    const s = String(val).trim();
+    const dateOnly = s.split('T')[0].split(' ')[0];
+    const parts = dateOnly.split('-');
+    if (parts.length === 3) {
+      if (parts[2].length === 4) {
+        const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+        return isNaN(d.getTime()) ? null : d;
+      }
+      if (parts[0].length === 4) {
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        return isNaN(d.getTime()) ? null : d;
+      }
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function toIsoDate(val) {
+    if (!val) return null;
+    const s = String(val).trim();
+    const dateOnly = s.split('T')[0].split(' ')[0];
+    const parts = dateOnly.split('-');
+    if (parts.length === 3 && parts[2].length === 4) {
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    return dateOnly;
+  }
+
   function getDaysLate(returningDate, today) {
     if (!returningDate || !today) return 0;
-    const r = new Date(returningDate + 'T00:00:00');
-    const t = new Date(today + 'T00:00:00');
+    const r = parseDate(returningDate);
+    const t = parseDate(today);
+    if (!r || !t) return 0;
     const diff = Math.floor((t - r) / (1000 * 60 * 60 * 24));
     return Math.max(0, diff);
   }
@@ -291,8 +357,10 @@ function createReportsService(db, settingsService) {
       // Plain text representations for Excel
       const bookingDisplayText = `#${r.booking_no}${r.status ? `\n${r.status}` : ''}`;
       const customerDisplayText = [r.customer_name, r.customer_phone, r.city].filter(Boolean).join('\n');
-      const deliveryDateDisplayText = `${r.delivery_date}${r.delivered_on ? `\nDelivered: ${r.delivered_on}` : ''}`;
-      const returnDateDisplayText = r.returning_date || '—';
+      const delDateStr = formatDateDDMMYYYY(r.delivery_date) || r.delivery_date || '—';
+      const delOnStr = r.delivered_on ? formatDateDDMMYYYY(r.delivered_on) || r.delivered_on : '';
+      const deliveryDateDisplayText = `${delDateStr}${delOnStr ? `\nDelivered: ${delOnStr}` : ''}`;
+      const returnDateDisplayText = formatDateDDMMYYYY(r.returning_date) || r.returning_date || '—';
 
       const itemsTextList = items.map(it => {
         const checkMark = it.is_ready ? '☑' : '☐';
@@ -327,17 +395,17 @@ function createReportsService(db, settingsService) {
 
       const customerDisplayHtml = `
         <div style="font-weight: 700; color: #0f172a; font-size: 10.5px;">${escapeHtml(r.customer_name || '—')}</div>
-        ${r.customer_phone ? `<div style="font-family: monospace; font-size: 9.5px; color: #475569; margin-top: 1px;">📞 ${escapeHtml(r.customer_phone)}</div>` : ''}
+        ${r.customer_phone ? `<div style="font-family: monospace; font-size: 9.5px; color: #475569; margin-top: 1px;">${escapeHtml(r.customer_phone)}</div>` : ''}
         ${r.city ? `<div style="font-size: 9px; color: #64748b; margin-top: 1px;">${escapeHtml(r.city)}</div>` : ''}
       `;
 
       const deliveryDateDisplayHtml = `
-        <div style="font-weight: 600; color: #1e293b; font-size: 10.5px;">${escapeHtml(r.delivery_date || '—')}</div>
-        ${r.delivered_on ? `<div style="font-size: 8.5px; color: #16a34a; font-weight: 600; margin-top: 2px;">✓ Delivered: ${escapeHtml(r.delivered_on)}</div>` : ''}
+        <div style="font-weight: 600; color: #1e293b; font-size: 10.5px;">${escapeHtml(formatDateDDMMYYYY(r.delivery_date) || r.delivery_date || '—')}</div>
+        ${r.delivered_on ? `<div style="font-size: 8.5px; color: #16a34a; font-weight: 600; margin-top: 2px;">✓ Delivered: ${escapeHtml(formatDateDDMMYYYY(r.delivered_on) || r.delivered_on)}</div>` : ''}
       `;
 
       const returningDateHtml = `
-        <div style="color: #334155; font-size: 10.5px;">${escapeHtml(r.returning_date || '—')}</div>
+        <div style="color: #334155; font-size: 10.5px;">${escapeHtml(formatDateDDMMYYYY(r.returning_date) || r.returning_date || '—')}</div>
       `;
 
       const dressesPrepHtml = `
@@ -799,14 +867,14 @@ function createReportsService(db, settingsService) {
 
     const showRemark = inactiveOnly || enriched.some(r => !r.active);
     const columns = [
-        { header: 'Code', key: 'code', isText: true, width: 12 },
-        { header: 'Dress Name', key: 'name', width: 32 },
-        { header: 'Category', key: 'category', width: 16 },
-        { header: 'Condition', key: 'condition_label', width: 16 },
-        { header: 'Size', key: 'size', width: 10 },
-        { header: 'Rate', key: 'rental_price', isMoney: true, width: 14 },
-        { header: 'Bookings', key: 'booking_count', isNum: true, width: 10 },
-        { header: 'Status', key: 'status_label', width: 10 },
+      { header: 'Code', key: 'code', isText: true, width: 12 },
+      { header: 'Dress Name', key: 'name', width: 32 },
+      { header: 'Category', key: 'category', width: 16 },
+      { header: 'Condition', key: 'condition_label', width: 16 },
+      { header: 'Size', key: 'size', width: 10 },
+      { header: 'Rate', key: 'rental_price', isMoney: true, width: 14 },
+      { header: 'Bookings', key: 'booking_count', isNum: true, width: 10 },
+      { header: 'Status', key: 'status_label', width: 10 },
     ];
     if (showRemark) columns.push({ header: 'Inactive Remark', key: 'inactive_remark', width: 36 });
 
@@ -860,28 +928,33 @@ function createReportsService(db, settingsService) {
     const colExpr = dateField === 'delivery_date'
       ? 'b.delivery_date'
       : dateField === 'returning_date'
-      ? 'b.returning_date'
-      : 'COALESCE(b.booking_date, substr(b.created_at, 1, 10))';
+        ? 'b.returning_date'
+        : 'COALESCE(b.booking_date, substr(b.created_at, 1, 10))';
 
-    if (dateFrom && dateTo && dateFrom === dateTo) {
-      conditions.push(`${colExpr} = ?`);
-      params.push(dateFrom);
-      parts.push(`${fieldLabels[dateField] || 'Date'}: ${dateFrom}`);
+    const normColExpr = `(CASE WHEN substr(${colExpr}, 3, 1) = '-' AND substr(${colExpr}, 6, 1) = '-' THEN substr(${colExpr}, 7, 4) || '-' || substr(${colExpr}, 4, 2) || '-' || substr(${colExpr}, 1, 2) ELSE ${colExpr} END)`;
+
+    const isoDateFrom = toIsoDate(dateFrom);
+    const isoDateTo = toIsoDate(dateTo);
+
+    if (isoDateFrom && isoDateTo && isoDateFrom === isoDateTo) {
+      conditions.push(`${normColExpr} = ?`);
+      params.push(isoDateFrom);
+      parts.push(`${fieldLabels[dateField] || 'Date'}: ${formatDateDDMMYYYY(dateFrom)}`);
     } else {
-      if (dateFrom) {
-        conditions.push(`${colExpr} >= ?`);
-        params.push(dateFrom);
+      if (isoDateFrom) {
+        conditions.push(`${normColExpr} >= ?`);
+        params.push(isoDateFrom);
       }
-      if (dateTo) {
-        conditions.push(`${colExpr} <= ?`);
-        params.push(dateTo);
+      if (isoDateTo) {
+        conditions.push(`${normColExpr} <= ?`);
+        params.push(isoDateTo);
       }
       if (dateFrom && dateTo) {
-        parts.push(`${fieldLabels[dateField] || 'Date'}: ${dateFrom} to ${dateTo}`);
+        parts.push(`${fieldLabels[dateField] || 'Date'}: ${formatDateDDMMYYYY(dateFrom)} to ${formatDateDDMMYYYY(dateTo)}`);
       } else if (dateFrom) {
-        parts.push(`${fieldLabels[dateField] || 'Date'}: From ${dateFrom}`);
+        parts.push(`${fieldLabels[dateField] || 'Date'}: From ${formatDateDDMMYYYY(dateFrom)}`);
       } else if (dateTo) {
-        parts.push(`${fieldLabels[dateField] || 'Date'}: Upto ${dateTo}`);
+        parts.push(`${fieldLabels[dateField] || 'Date'}: Upto ${formatDateDDMMYYYY(dateTo)}`);
       }
     }
 
@@ -892,6 +965,7 @@ function createReportsService(db, settingsService) {
         b.id, b.booking_no, b.status,
         b.booking_date, b.delivery_date, b.returning_date,
         b.delivered_on, b.returned_on,
+        b.total_returning_days,
         b.grand_total, b.amount_paid, b.remaining,
         cu.name AS customer_name, cu.phone AS customer_phone,
         (SELECT group_concat(dress_name_snapshot || ' x' || COALESCE(quantity, 1), ', ') FROM booking_items WHERE booking_id = b.id AND deleted_at IS NULL) AS dresses_summary,
@@ -910,19 +984,77 @@ function createReportsService(db, settingsService) {
           if (!isNaN(d.getTime())) {
             timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
           }
-        } catch (e) {}
+        } catch (e) { }
       }
-      const bDate = r.booking_date || (r.created_at ? r.created_at.slice(0, 10) : '—');
+      const rawDate = r.booking_date || (r.created_at ? r.created_at.slice(0, 10) : '');
+      const bDate = formatDateDDMMYYYY(rawDate) || rawDate || '—';
       const bookedAt = timeStr ? `${bDate} ${timeStr}` : bDate;
+
+      const rawDresses = r.dresses_summary || '';
+      const dressList = rawDresses ? rawDresses.split(', ').map(s => s.trim()).filter(Boolean) : [];
+      const dressesFormatted = dressList.length > 1
+        ? dressList.map(d => `• ${d}`).join('\n')
+        : (dressList[0] ? `• ${dressList[0]}` : '—');
+
+      // Customer + Phone merged below
+      const custName = r.customer_name || '—';
+      const custPhone = r.customer_phone || '';
+      const customerDisplayText = custPhone ? `${custName}\n${custPhone}` : custName;
+      const customerDisplayHtml = `
+        <div style="font-weight: 700; color: #0f172a; line-height: 1.3;">${escapeHtml(custName)}</div>
+        ${custPhone ? `<div style="font-family: monospace; font-size: 9.5px; color: #475569; margin-top: 2px;">${escapeHtml(custPhone)}</div>` : ''}
+      `;
+
+      // Delivery + Return merged (DD: / RD:)
+      const delDate = formatDateDDMMYYYY(r.delivery_date) || r.delivery_date || '—';
+      const retDate = formatDateDDMMYYYY(r.returning_date) || r.returning_date || '—';
+      const deliveryReturnText = `DD: ${delDate}\nRD: ${retDate}`;
+      const deliveryReturnHtml = `
+        <div style="font-size: 10px; line-height: 1.35; white-space: nowrap;">
+          <div><strong style="color: #7c3aed;">DD:</strong> ${escapeHtml(delDate)}</div>
+          <div style="margin-top: 2px;"><strong style="color: #0284c7;">RD:</strong> ${escapeHtml(retDate)}</div>
+        </div>
+      `;
+
+      // Rental Days
+      let rentalDaysVal = '—';
+      if (r.delivery_date && r.returning_date) {
+        const d1 = parseDate(r.delivery_date);
+        const d2 = parseDate(r.returning_date);
+        if (d1 && d2) {
+          const diff = Math.abs(Math.round((d2 - d1) / 86400000));
+          rentalDaysVal = `${diff} ${diff === 1 ? 'Day' : 'Days'}`;
+        }
+      } else if (r.total_returning_days != null) {
+        rentalDaysVal = `${r.total_returning_days} Days`;
+      }
+
+      // Total & Paid merged
+      const gTotal = Number(r.grand_total || 0);
+      const aPaid = Number(r.amount_paid || 0);
+      const totalPaidText = `Total: Rs. ${gTotal.toLocaleString()}\nPaid: Rs. ${aPaid.toLocaleString()}`;
+      const totalPaidHtml = `
+        <div style="font-size: 10px; line-height: 1.35; text-align: right; white-space: nowrap;">
+          <div><span style="color: #64748b; font-size: 8.5px; font-weight: 600;">Total:</span> <strong>Rs. ${gTotal.toLocaleString()}</strong></div>
+          <div style="margin-top: 2px;"><span style="color: #16a34a; font-size: 8.5px; font-weight: 600;">Paid:</span> <strong style="color: #16a34a;">Rs. ${aPaid.toLocaleString()}</strong></div>
+        </div>
+      `;
 
       return {
         ...r,
-        customer_name: r.customer_name || '—',
-        customer_phone: r.customer_phone || '—',
-        dresses_summary: r.dresses_summary || '—',
+        customer_name: custName,
+        customer_phone: custPhone,
+        customer_display: customerDisplayText,
+        customer_display_html: customerDisplayHtml,
+        dresses_summary: dressesFormatted,
         booked_at: bookedAt,
-        delivery_date: r.delivery_date || '—',
-        returning_date: r.returning_date || '—',
+        delivery_date: delDate,
+        returning_date: retDate,
+        delivery_return: deliveryReturnText,
+        delivery_return_html: deliveryReturnHtml,
+        rental_days: rentalDaysVal,
+        total_paid: totalPaidText,
+        total_paid_html: totalPaidHtml,
         status: r.status || 'None',
       };
     });
@@ -936,26 +1068,27 @@ function createReportsService(db, settingsService) {
       title: 'Bookings Report (بکنگز رپورٹ)',
       subtitle: `${enriched.length} bookings`,
       filtersSummary: parts.length ? parts.join(' • ') : 'All Bookings',
-      orientation: 'landscape',
+      orientation: 'portrait',
       columns: [
-        { header: 'Booking #', key: 'booking_no', isNum: true, width: 12 },
-        { header: 'Customer', key: 'customer_name', width: 22 },
-        { header: 'Phone', key: 'customer_phone', isText: true, width: 15 },
-        { header: 'Dresses / Ordered', key: 'dresses_summary', width: 34 },
-        { header: 'Booked Date & Time', key: 'booked_at', width: 20 },
-        { header: 'Delivery Date', key: 'delivery_date', width: 14 },
-        { header: 'Return Date', key: 'returning_date', width: 14 },
-        { header: 'Status', key: 'status', width: 12 },
-        { header: 'Total (Rs)', key: 'grand_total', isMoney: true, width: 14 },
-        { header: 'Paid (Rs)', key: 'amount_paid', isMoney: true, width: 14 },
+        { header: 'Booking #', key: 'booking_no', isNum: true, width: 11 },
+        { header: 'Customer', key: 'customer_display', width: 22 },
+        { header: 'Dresses / Ordered', key: 'dresses_summary', width: 32 },
+        { header: 'Booked Date & Time', key: 'booked_at', width: 18 },
+        { header: 'Delivery & Return', key: 'delivery_return', width: 16, align: 'center' },
+        { header: 'Rental Days', key: 'rental_days', width: 12, align: 'center' },
+        { header: 'Status', key: 'status', width: 11, align: 'center' },
+        { header: 'Total & Paid (Rs)', key: 'total_paid', width: 17, align: 'right' },
         { header: 'Remaining (Rs)', key: 'remaining', isMoney: true, width: 14 },
       ],
       rows: enriched,
       totals: {
         booking_no: `${enriched.length} Bookings`,
+        customer_display: '',
+        total_paid: `Total: Rs. ${totalGrand.toLocaleString()}\nPaid: Rs. ${totalPaid.toLocaleString()}`,
+        total_paid_html: `<div style="text-align: right; line-height: 1.35;"><div>Total: Rs. ${totalGrand.toLocaleString()}</div><div style="color: #16a34a;">Paid: Rs. ${totalPaid.toLocaleString()}</div></div>`,
+        remaining: totalRemaining,
         grand_total: totalGrand,
         amount_paid: totalPaid,
-        remaining: totalRemaining,
       },
     };
   }
@@ -1009,6 +1142,22 @@ function createReportsService(db, settingsService) {
     const totalPaid = rows.reduce((s, r) => s + (r.amount_paid || 0), 0);
     const totalRemaining = rows.reduce((s, r) => s + (r.remaining || 0), 0);
 
+    const enriched = rows.map(r => {
+      const rawDresses = r.dresses_summary || '';
+      const dressList = rawDresses ? rawDresses.split(', ').map(s => s.trim()).filter(Boolean) : [];
+      const dressesFormatted = dressList.length > 1
+        ? dressList.map(d => `• ${d}`).join('\n')
+        : (dressList[0] ? `• ${dressList[0]}` : '—');
+
+      return {
+        ...r,
+        dresses_summary: dressesFormatted,
+        booking_date: formatDateDDMMYYYY(r.booking_date) || r.booking_date || '—',
+        delivery_date: formatDateDDMMYYYY(r.delivery_date) || r.delivery_date || '—',
+        returning_date: formatDateDDMMYYYY(r.returning_date) || r.returning_date || '—',
+      };
+    });
+
     return {
       reportType: 'customer_report',
       title: 'Customer Bookings Report (کسٹمر رپورٹ - BDRCustomer)',
@@ -1016,8 +1165,8 @@ function createReportsService(db, settingsService) {
       filtersSummary: [
         month ? `Month: ${month}` : '',
         status ? `Status: ${status}` : '',
-        dateFrom ? `From: ${dateFrom}` : '',
-        dateTo ? `To: ${dateTo}` : '',
+        dateFrom ? `From: ${formatDateDDMMYYYY(dateFrom)}` : '',
+        dateTo ? `To: ${formatDateDDMMYYYY(dateTo)}` : '',
       ].filter(Boolean).join(' • ') || 'All Bookings',
       columns: [
         { header: 'Booking #', key: 'booking_no', isNum: true, width: 12 },
@@ -1034,7 +1183,7 @@ function createReportsService(db, settingsService) {
         { header: 'Paid', key: 'amount_paid', isMoney: true, width: 16 },
         { header: 'Remaining', key: 'remaining', isMoney: true, width: 16 },
       ],
-      rows,
+      rows: enriched,
       totals: {
         booking_no: `${rows.length} Bookings`,
         grand_total: totalGrand,
@@ -1541,6 +1690,7 @@ function createReportsService(db, settingsService) {
       totals: reportData.totals,
       settings,
       generatedBy,
+      orientation: reportData.orientation || 'portrait',
     });
 
     return {
@@ -1648,10 +1798,14 @@ function createReportsService(db, settingsService) {
 
       win.webContents.once('did-finish-load', async () => {
         try {
+          const isPdfLandscape = reportData.orientation === 'portrait'
+            ? false
+            : (reportData.orientation === 'landscape' || reportType === 'delivery_sheet');
+
           const pdfBuffer = await win.webContents.printToPDF({
             printBackground: true,
             pageSize: 'A4',
-            landscape: reportData.columns?.length >= 7 || reportData.orientation === 'landscape' || reportType === 'delivery_sheet',
+            landscape: isPdfLandscape,
             margins: { marginType: 'none' },
           });
           try { win.destroy(); win = null; } catch { }

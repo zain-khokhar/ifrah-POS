@@ -48,8 +48,71 @@ function getNext2DaysIso() {
   return d.toISOString().slice(0, 10);
 }
 
+function formatDateDDMMYYYY(val, fallback = '—') {
+  if (!val) return fallback;
+  try {
+    if (val instanceof Date) {
+      if (isNaN(val.getTime())) return fallback;
+      const d = String(val.getDate()).padStart(2, '0');
+      const m = String(val.getMonth() + 1).padStart(2, '0');
+      const y = val.getFullYear();
+      return `${d}-${m}-${y}`;
+    }
+    const s = String(val).trim();
+    if (!s) return fallback;
+
+    const dateOnly = s.split('T')[0].split(' ')[0];
+    const parts = dateOnly.split('-');
+    if (parts.length === 3) {
+      if (parts[0].length === 4 && parts[1].length <= 2 && parts[2].length <= 2) {
+        const y = parts[0];
+        const m = parts[1].padStart(2, '0');
+        const d = parts[2].padStart(2, '0');
+        return `${d}-${m}-${y}`;
+      }
+      if (parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 4) {
+        const d = parts[0].padStart(2, '0');
+        const m = parts[1].padStart(2, '0');
+        const y = parts[2];
+        return `${d}-${m}-${y}`;
+      }
+    }
+    const dObj = new Date(s);
+    if (!isNaN(dObj.getTime())) {
+      const d = String(dObj.getDate()).padStart(2, '0');
+      const m = String(dObj.getMonth() + 1).padStart(2, '0');
+      const y = dObj.getFullYear();
+      return `${d}-${m}-${y}`;
+    }
+    return s;
+  } catch {
+    return fallback;
+  }
+}
+
+function parseDateSafe(val) {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  const s = String(val).trim();
+  const dateOnly = s.split('T')[0].split(' ')[0];
+  const parts = dateOnly.split('-');
+  if (parts.length === 3) {
+    if (parts[2].length === 4) {
+      const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (parts[0].length === 4) {
+      const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      return isNaN(d.getTime()) ? null : d;
+    }
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function formatBookingDateTime(bookingDate, createdAt) {
-  const dateStr = bookingDate || (createdAt ? createdAt.slice(0, 10) : '—');
+  const rawDate = bookingDate || (createdAt ? createdAt.slice(0, 10) : '');
+  const dateStr = formatDateDDMMYYYY(rawDate);
   let timeStr = '';
   if (createdAt) {
     try {
@@ -281,6 +344,11 @@ export default function BookingsPage() {
                 value={dateFrom}
                 onChange={e => setDateFrom(e.target.value)}
               />
+              {dateFrom && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', border: '1px solid #ddd6fe', padding: '2px 7px', borderRadius: 4 }}>
+                  {formatDateDDMMYYYY(dateFrom)}
+                </span>
+              )}
               <span style={{ fontSize: 12, color: '#64748b' }}>se To</span>
               <input
                 type="date"
@@ -290,6 +358,11 @@ export default function BookingsPage() {
                 min={dateFrom || undefined}
                 onChange={e => setDateTo(e.target.value)}
               />
+              {dateTo && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', border: '1px solid #ddd6fe', padding: '2px 7px', borderRadius: 4 }}>
+                  {formatDateDDMMYYYY(dateTo)}
+                </span>
+              )}
             </div>
           )}
 
@@ -470,7 +543,7 @@ export default function BookingsPage() {
 
                       {/* Delivery Date */}
                       <td>
-                        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{b.delivery_date || '—'}</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{formatDateDDMMYYYY(b.delivery_date)}</div>
                         {b.delivered_on ? (
                           <span style={{ fontSize: 10.5, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
                             ✓ Delivered
@@ -482,18 +555,29 @@ export default function BookingsPage() {
 
                       {/* Returning Date */}
                       <td>
-                        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{b.returning_date || '—'}</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{formatDateDDMMYYYY(b.returning_date)}</div>
                         {b.returned_on ? (
                           <span style={{ fontSize: 10.5, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
                             ✓ Returned {b.return_condition ? `(${b.return_condition})` : ''}
                           </span>
-                        ) : (b.delivered_on && b.returning_date && b.returning_date < new Date().toISOString().slice(0, 10)) ? (
-                          <span style={{ fontSize: 10.5, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
-                            ⚠️ Overdue
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: 10.5, color: '#94a3b8' }}>Awaiting</span>
-                        )}
+                        ) : (() => {
+                          const isOverdue = (() => {
+                            if (!b.delivered_on || !b.returning_date || b.returned_on) return false;
+                            const d = parseDateSafe(b.returning_date);
+                            if (!d) return false;
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            d.setHours(0, 0, 0, 0);
+                            return d < today;
+                          })();
+                          return isOverdue ? (
+                            <span style={{ fontSize: 10.5, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 6px', borderRadius: 4, display: 'inline-block', marginTop: 2 }}>
+                              ⚠️ Overdue
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 10.5, color: '#94a3b8' }}>Awaiting</span>
+                          );
+                        })()}
                       </td>
 
                       {/* Status */}

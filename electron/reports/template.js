@@ -21,6 +21,34 @@ function formatMoney(amount) {
   return 'Rs. ' + n.toLocaleString('en-PK');
 }
 
+function formatDateDDMMYYYY(val) {
+  if (!val) return '—';
+  try {
+    if (val instanceof Date) {
+      if (isNaN(val.getTime())) return '—';
+      const d = String(val.getDate()).padStart(2, '0');
+      const m = String(val.getMonth() + 1).padStart(2, '0');
+      const y = val.getFullYear();
+      return `${d}-${m}-${y}`;
+    }
+    const s = String(val).trim();
+    if (!s) return '—';
+    const dateOnly = s.split('T')[0].split(' ')[0];
+    const parts = dateOnly.split('-');
+    if (parts.length === 3) {
+      if (parts[0].length === 4 && parts[1].length <= 2 && parts[2].length <= 2) {
+        return `${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[0]}`;
+      }
+      if (parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 4) {
+        return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[2]}`;
+      }
+    }
+    return s;
+  } catch {
+    return val;
+  }
+}
+
 /**
  * Generate full HTML document for a report.
  *
@@ -50,19 +78,20 @@ function renderReportHtml({
   orientation = 'portrait',
 }) {
   const shopName = settings.shop_name || 'Ifrah Collection';
-  const tagline  = settings.shop_tagline || 'Exclusive Bridal & Party Wear';
-  const phone    = settings.shop_phone_1 || '0300-0000000';
-  const address  = settings.shop_address || 'Main Market, Burewala';
+  const tagline = settings.shop_tagline || 'Exclusive Bridal & Party Wear';
+  const phone = settings.shop_phone_1 || '0300-0000000';
+  const address = settings.shop_address || 'Main Market, Burewala';
 
   const now = new Date();
-  const dateFormatted = now.toLocaleDateString('en-PK', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  });
+  const dStr = String(now.getDate()).padStart(2, '0');
+  const mStr = String(now.getMonth() + 1).padStart(2, '0');
+  const yStr = now.getFullYear();
+  const dateFormatted = `${dStr}-${mStr}-${yStr}`;
   const timeFormatted = now.toLocaleTimeString('en-PK', {
     hour: '2-digit', minute: '2-digit', hour12: true,
   });
 
-  const isLandscape = orientation === 'landscape' || columns.length >= 7 || reportType === 'delivery_sheet';
+  const isLandscape = orientation === 'portrait' ? false : (orientation === 'landscape' || reportType === 'delivery_sheet');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -72,7 +101,7 @@ function renderReportHtml({
   <style>
     @page {
       size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-      margin: 12mm 10mm 15mm 10mm;
+      margin: 10mm 8mm 12mm 8mm;
     }
 
     * {
@@ -323,33 +352,54 @@ function renderReportHtml({
       ` : rows.map(r => `
         <tr>
           ${columns.map(col => {
-            const val = r[col.key];
-            let displayVal = escapeHtml(val ?? '—');
-            let alignClass = col.align === 'right' ? 'align-right' : col.align === 'center' ? 'align-center' : 'align-left';
+    const val = r[col.key];
+    let displayVal = escapeHtml(val ?? '—');
+    let alignClass = col.align === 'right' ? 'align-right' : col.align === 'center' ? 'align-center' : 'align-left';
 
-            if (r[col.key + '_html']) {
-              displayVal = r[col.key + '_html'];
-            } else if (col.isMoney) {
-              alignClass = 'align-right money-cell';
-              displayVal = formatMoney(val);
-            } else if (col.isNum) {
-              alignClass = 'align-center';
-            } else if (typeof val === 'string' && val.includes('\n')) {
-              displayVal = escapeHtml(val).replace(/\n/g, '<br/>');
-            }
+    if (r[col.key + '_html']) {
+      displayVal = r[col.key + '_html'];
+    } else if (col.isMoney) {
+      alignClass = 'align-right money-cell';
+      displayVal = formatMoney(val);
+    } else if (col.isNum) {
+      alignClass = 'align-center';
+    } else if (col.key.includes('date') || col.key === 'paid_on' || col.key === 'booked_at') {
+      alignClass = 'align-center';
+      if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+        displayVal = escapeHtml(formatDateDDMMYYYY(val));
+      }
+    } else if (col.key === 'dresses_summary' || col.key === 'dresses' || (col.header && col.header.toLowerCase().includes('dress'))) {
+      if (typeof val === 'string' && val.trim() && val !== '—') {
+        const items = val.split(/[,\n]/)
+          .map(s => s.replace(/^[•\s*-]+/, '').trim())
+          .filter(Boolean);
+        if (items.length > 0) {
+          displayVal = `<div style="display:flex;flex-direction:column;gap:3px;text-align:left;">` +
+            items.map(it => `
+              <div style="display:flex;align-items:flex-start;gap:5px;line-height:1.35;">
+                <span style="color:#7c3aed;font-size:10px;line-height:1.2;flex-shrink:0;">•</span>
+                <span>${escapeHtml(it)}</span>
+              </div>
+            `).join('') +
+            `</div>`;
+        }
+      }
+    } else if (typeof val === 'string' && val.includes('\n')) {
+      displayVal = escapeHtml(val).replace(/\n/g, '<br/>');
+    }
 
-            // Special badges
-            if (col.key === 'status') {
-              const s = String(val).toLowerCase();
-              displayVal = `<span class="badge-status badge-${s}">${escapeHtml(val)}</span>`;
-            } else if (col.key === 'is_ready_text' && val === 'Ready') {
-              displayVal = `<span class="badge-status badge-ready">✓ Ready</span>`;
-            } else if (col.key === 'days_late' && Number(val) > 0) {
-              displayVal = `<span class="badge-status badge-overdue">⚠️ ${val} din LATE</span>`;
-            }
+    // Special badges
+    if (col.key === 'status') {
+      const s = String(val).toLowerCase();
+      displayVal = `<span class="badge-status badge-${s}">${escapeHtml(val)}</span>`;
+    } else if (col.key === 'is_ready_text' && val === 'Ready') {
+      displayVal = `<span class="badge-status badge-ready">✓ Ready</span>`;
+    } else if (col.key === 'days_late' && Number(val) > 0) {
+      displayVal = `<span class="badge-status badge-overdue">⚠️ ${val} din LATE</span>`;
+    }
 
-            return `<td class="${alignClass}">${displayVal}</td>`;
-          }).join('')}
+    return `<td class="${alignClass}">${displayVal}</td>`;
+  }).join('')}
         </tr>
       `).join('')}
     </tbody>
@@ -358,16 +408,16 @@ function renderReportHtml({
       <tfoot>
         <tr>
           ${columns.map((col, idx) => {
-            if (idx === 0) return `<td>TOTAL / کُل (${rows.length})</td>`;
-            if (totals[col.key + '_html']) {
-              return `<td class="${col.align === 'right' || col.isMoney ? 'align-right' : 'align-center'}">${totals[col.key + '_html']}</td>`;
-            }
-            if (totals[col.key] !== undefined && totals[col.key] !== '') {
-              const tVal = col.isMoney ? formatMoney(totals[col.key]) : escapeHtml(totals[col.key]).replace(/\n/g, '<br/>');
-              return `<td class="${col.isMoney ? 'align-right money-cell' : 'align-center'}">${tVal}</td>`;
-            }
-            return `<td></td>`;
-          }).join('')}
+    if (idx === 0) return `<td>TOTAL / کُل (${rows.length})</td>`;
+    if (totals[col.key + '_html']) {
+      return `<td class="${col.align === 'right' || col.isMoney ? 'align-right' : 'align-center'}">${totals[col.key + '_html']}</td>`;
+    }
+    if (totals[col.key] !== undefined && totals[col.key] !== '') {
+      const tVal = col.isMoney ? formatMoney(totals[col.key]) : escapeHtml(totals[col.key]).replace(/\n/g, '<br/>');
+      return `<td class="${col.isMoney ? 'align-right money-cell' : 'align-center'}">${tVal}</td>`;
+    }
+    return `<td></td>`;
+  }).join('')}
         </tr>
       </tfoot>
     ` : ''}

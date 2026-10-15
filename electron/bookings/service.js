@@ -22,6 +22,71 @@ const { requireRole, ROLES } = require('../auth/roles');
 
 const MAX_LINES = 99;
 
+function formatDateDDMMYYYY(val) {
+  if (!val) return null;
+  try {
+    if (val instanceof Date) {
+      if (isNaN(val.getTime())) return null;
+      const d = String(val.getDate()).padStart(2, '0');
+      const m = String(val.getMonth() + 1).padStart(2, '0');
+      const y = val.getFullYear();
+      return `${d}-${m}-${y}`;
+    }
+    const s = String(val).trim();
+    if (!s) return null;
+    const dateOnly = s.split('T')[0].split(' ')[0];
+    const parts = dateOnly.split('-');
+    if (parts.length === 3) {
+      if (parts[0].length === 4 && parts[1].length <= 2 && parts[2].length <= 2) {
+        return `${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[0]}`;
+      }
+      if (parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 4) {
+        return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[2]}`;
+      }
+    }
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      const dStr = String(d.getDate()).padStart(2, '0');
+      const mStr = String(d.getMonth() + 1).padStart(2, '0');
+      return `${dStr}-${mStr}-${d.getFullYear()}`;
+    }
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+function parseDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  const s = String(val).trim();
+  const dateOnly = s.split('T')[0].split(' ')[0];
+  const parts = dateOnly.split('-');
+  if (parts.length === 3) {
+    if (parts[2].length === 4) {
+      const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (parts[0].length === 4) {
+      const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      return isNaN(d.getTime()) ? null : d;
+    }
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function toIsoDate(val) {
+  if (!val) return null;
+  const s = String(val).trim();
+  const dateOnly = s.split('T')[0].split(' ')[0];
+  const parts = dateOnly.split('-');
+  if (parts.length === 3 && parts[2].length === 4) {
+    return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+  }
+  return dateOnly;
+}
+
 function createBookingsService(db) {
 
   // Cleanup any legacy soft-deleted bookings so they don't block unique constraints
@@ -91,12 +156,14 @@ function createBookingsService(db) {
       ? 'b.returning_date'
       : 'COALESCE(b.booking_date, substr(b.created_at, 1, 10))';
 
-    if (dateFrom)   { conditions.push(`${colExpr} >= ?`); params.push(dateFrom); }
-    if (dateTo)     { conditions.push(`${colExpr} <= ?`); params.push(dateTo); }
+    const normColExpr = `(CASE WHEN substr(${colExpr}, 3, 1) = '-' AND substr(${colExpr}, 6, 1) = '-' THEN substr(${colExpr}, 7, 4) || '-' || substr(${colExpr}, 4, 2) || '-' || substr(${colExpr}, 1, 2) ELSE ${colExpr} END)`;
+
+    if (dateFrom)   { conditions.push(`${normColExpr} >= ?`); params.push(toIsoDate(dateFrom)); }
+    if (dateTo)     { conditions.push(`${normColExpr} <= ?`); params.push(toIsoDate(dateTo)); }
 
     const where = conditions.join(' AND ');
 
-    return db.prepare(`
+    const rows = db.prepare(`
       SELECT
         b.id, b.booking_no, b.status,
         b.booking_date, b.delivery_date, b.returning_date,
@@ -119,6 +186,15 @@ function createBookingsService(db) {
       ORDER BY b.booking_no DESC
       LIMIT ? OFFSET ?
     `).all(...params, limit, offset);
+
+    return rows.map(b => ({
+      ...b,
+      booking_date: formatDateDDMMYYYY(b.booking_date) || b.booking_date,
+      delivery_date: formatDateDDMMYYYY(b.delivery_date) || b.delivery_date,
+      returning_date: formatDateDDMMYYYY(b.returning_date) || b.returning_date,
+      delivered_on: formatDateDDMMYYYY(b.delivered_on) || b.delivered_on,
+      returned_on: formatDateDDMMYYYY(b.returned_on) || b.returned_on,
+    }));
   }
 
   // ─── GET ONE (full, with items) ───────────────────────────────────────────
@@ -163,7 +239,19 @@ function createBookingsService(db) {
       ORDER BY p.paid_on, p.id
     `).all(id);
 
-    return { ...booking, items, payments };
+    return {
+      ...booking,
+      booking_date: formatDateDDMMYYYY(booking.booking_date) || booking.booking_date,
+      delivery_date: formatDateDDMMYYYY(booking.delivery_date) || booking.delivery_date,
+      returning_date: formatDateDDMMYYYY(booking.returning_date) || booking.returning_date,
+      delivered_on: formatDateDDMMYYYY(booking.delivered_on) || booking.delivered_on,
+      returned_on: formatDateDDMMYYYY(booking.returned_on) || booking.returned_on,
+      items,
+      payments: payments.map(p => ({
+        ...p,
+        paid_on: formatDateDDMMYYYY(p.paid_on) || p.paid_on,
+      })),
+    };
   }
 
   // ─── GET BY booking_no ────────────────────────────────────────────────────
@@ -178,13 +266,31 @@ function createBookingsService(db) {
   // ─── COMPUTED FIELDS ─────────────────────────────────────────────────────
   function computeMonth(bookingDate) {
     if (!bookingDate) return null;
-    return String(bookingDate).slice(0, 7);   // YYYY-MM
+    const s = String(bookingDate).trim();
+    const dateOnly = s.split('T')[0].split(' ')[0];
+    const parts = dateOnly.split('-');
+    if (parts.length === 3) {
+      if (parts[2].length === 4) {
+        // DD-MM-YYYY -> YYYY-MM
+        return `${parts[2]}-${parts[1].padStart(2, '0')}`;
+      }
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD -> YYYY-MM
+        return `${parts[0]}-${parts[1].padStart(2, '0')}`;
+      }
+    }
+    const d = parseDate(bookingDate);
+    if (d) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+    return s.slice(0, 7);
   }
 
   function computeReturningDays(deliveryDate, returningDate) {
     if (!deliveryDate || !returningDate) return null;
-    const d1 = new Date(deliveryDate);
-    const d2 = new Date(returningDate);
+    const d1 = parseDate(deliveryDate);
+    const d2 = parseDate(returningDate);
+    if (!d1 || !d2) return null;
     return Math.abs(Math.round((d2 - d1) / 86400000));
   }
 
@@ -275,12 +381,15 @@ function createBookingsService(db) {
     const discount     = Math.max(0, parseInt(input.discount || 0, 10));
     // Use raw items for total (they have quantity/rate)
     const grandTotal   = computeGrandTotal(rawItems, discount);
+    const bookingDateFormatted = formatDateDDMMYYYY(input.booking_date) || str(input.booking_date);
+    const deliveryDateFormatted = formatDateDDMMYYYY(input.delivery_date) || str(input.delivery_date);
+    const returningDateFormatted = formatDateDDMMYYYY(input.returning_date) || str(input.returning_date);
     const bookingMonth = computeMonth(input.booking_date);
     const totalDays    = computeReturningDays(input.delivery_date, input.returning_date);
 
     const advanceAmount = Math.max(0, parseInt(input.advance_amount || 0, 10));
     const advanceMethod = String(input.advance_method || 'cash').toLowerCase();
-    const advanceDate   = input.advance_date ? String(input.advance_date).trim() : (str(input.booking_date) || new Date().toISOString().slice(0, 10));
+    const advanceDate   = input.advance_date ? (formatDateDDMMYYYY(input.advance_date) || String(input.advance_date).trim()) : (bookingDateFormatted || formatDateDDMMYYYY(new Date()));
     const advanceNote   = input.advance_note ? String(input.advance_note).trim() : 'Advance payment';
 
     const amountPaid = advanceAmount;
@@ -321,9 +430,9 @@ function createBookingsService(db) {
         num(input.customer_id),
         num(input.city_id),
         input.status || 'None',
-        str(input.booking_date),
-        str(input.delivery_date),
-        str(input.returning_date),
+        bookingDateFormatted,
+        deliveryDateFormatted,
+        returningDateFormatted,
         bookingMonth,
         totalDays,
         str(input.relative_name),
@@ -522,8 +631,14 @@ function createBookingsService(db) {
     const grandTotal   = computeGrandTotal(rawItems, discount);
     const amountPaid   = existing.amount_paid || 0;
     const remaining    = Math.max(0, grandTotal - amountPaid);
-    const bookingMonth = computeMonth(input.booking_date);
-    const totalDays    = computeReturningDays(input.delivery_date, input.returning_date);
+    const bookingDateFormatted = input.booking_date !== undefined ? (formatDateDDMMYYYY(input.booking_date) || str(input.booking_date)) : existing.booking_date;
+    const deliveryDateFormatted = input.delivery_date !== undefined ? (formatDateDDMMYYYY(input.delivery_date) || str(input.delivery_date)) : existing.delivery_date;
+    const returningDateFormatted = input.returning_date !== undefined ? (formatDateDDMMYYYY(input.returning_date) || str(input.returning_date)) : existing.returning_date;
+    const bookingMonth = computeMonth(input.booking_date !== undefined ? input.booking_date : existing.booking_date);
+    const totalDays    = computeReturningDays(
+      input.delivery_date !== undefined ? input.delivery_date : existing.delivery_date,
+      input.returning_date !== undefined ? input.returning_date : existing.returning_date
+    );
 
     const updateBooking = db.prepare(`
       UPDATE bookings SET
@@ -555,7 +670,9 @@ function createBookingsService(db) {
       updateBooking.run(
         num(input.customer_id), num(input.city_id),
         targetStatus,
-        str(input.booking_date), str(input.delivery_date), str(input.returning_date),
+        bookingDateFormatted,
+        deliveryDateFormatted,
+        returningDateFormatted,
         bookingMonth, totalDays,
         str(input.relative_name), str(input.relative_relation), str(input.notes),
         discount, grandTotal, remaining,
@@ -630,22 +747,26 @@ function createBookingsService(db) {
 
   // ─── TODAY'S SUMMARY (for home screen counters) ───────────────────────────
   function todaySummary() {
-    const today = new Date().toISOString().slice(0, 10);
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayDDMM = formatDateDDMMYYYY(todayIso);
+
     const deliveries = db.prepare(
       `SELECT COUNT(*) AS n FROM bookings
-       WHERE delivery_date = ? AND deleted_at IS NULL AND status != 'Closed'`
-    ).get(today).n;
+       WHERE (delivery_date = ? OR delivery_date = ?) AND deleted_at IS NULL AND status != 'Closed'`
+    ).get(todayIso, todayDDMM).n;
 
     const returns = db.prepare(
       `SELECT COUNT(*) AS n FROM bookings
-       WHERE returning_date = ? AND deleted_at IS NULL AND status != 'Closed'`
-    ).get(today).n;
+       WHERE (returning_date = ? OR returning_date = ?) AND deleted_at IS NULL AND status != 'Closed'`
+    ).get(todayIso, todayDDMM).n;
+
+    const normRet = `(CASE WHEN substr(returning_date, 3, 1) = '-' AND substr(returning_date, 6, 1) = '-' THEN substr(returning_date, 7, 4) || '-' || substr(returning_date, 4, 2) || '-' || substr(returning_date, 1, 2) ELSE returning_date END)`;
 
     const overdue = db.prepare(
       `SELECT COUNT(*) AS n FROM bookings
-       WHERE returning_date < ? AND delivered_on IS NOT NULL AND returned_on IS NULL
+       WHERE ${normRet} < ? AND delivered_on IS NOT NULL AND returned_on IS NULL
        AND deleted_at IS NULL AND status != 'Closed'`
-    ).get(today).n;
+    ).get(todayIso).n;
 
     const pending = db.prepare(
       `SELECT COUNT(*) AS n FROM bookings
@@ -672,6 +793,8 @@ function createBookingsService(db) {
     computeReturningDays,
     computeGrandTotal,
     computeLineTotals,
+    formatDateDDMMYYYY,
+    parseDate,
   };
 }
 

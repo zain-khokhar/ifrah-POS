@@ -392,28 +392,30 @@ function createSyncService(db, options = {}) {
               const printCount = remote.receipt_print_count || 0;
               const clashFlag  = remote.clash_flag || 0;
 
-              if (existing) {
-                if (!existing.updated_at || remote.updated_at >= existing.updated_at) {
+              const targetBooking = existing || (remote.booking_no ? db.prepare(`SELECT * FROM bookings WHERE booking_no = ?`).get(remote.booking_no) : null);
+
+              if (targetBooking) {
+                if (!targetBooking.updated_at || remote.updated_at >= targetBooking.updated_at) {
                   db.prepare(`
                     UPDATE bookings SET
-                      booking_no = ?, customer_id = ?, city_id = ?, status = ?,
+                      sync_id = ?, booking_no = ?, customer_id = ?, city_id = ?, status = ?,
                       booking_date = ?, delivery_date = ?, returning_date = ?, booking_month = ?,
                       total_returning_days = ?, relative_name = ?, relative_relation = ?, notes = ?,
                       delivered_on = ?, delivery_note = ?, returned_on = ?, return_condition = ?,
                       return_damage_note = ?, return_damage_photo = ?, security_deposit = ?, discount = ?,
                       grand_total = ?, amount_paid = ?, remaining = ?, receipt_print_count = ?, clash_flag = ?, deleted_at = ?,
                       sync_status = 'synced', last_synced_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-                    WHERE sync_id = ?
+                    WHERE id = ?
                   `).run(
-                    remote.booking_no, custId, cityId, remote.status || 'None',
+                    remote.sync_id, remote.booking_no, custId, cityId, remote.status || 'None',
                     remote.booking_date, remote.delivery_date, remote.returning_date, remote.booking_month,
                     remote.total_returning_days, remote.relative_name, remote.relative_relation, remote.notes,
                     remote.delivered_on, remote.delivery_note, remote.returned_on, remote.return_condition,
                     remote.return_damage_note, remote.return_damage_photo, secDep, disc,
                     gTotal, aPaid, rem, printCount, clashFlag, remote.deleted_at,
-                    remote.sync_id
+                    targetBooking.id
                   );
-                  affectedBookingIds.add(existing.id);
+                  affectedBookingIds.add(targetBooking.id);
                 }
               } else {
                 const r = db.prepare(`
