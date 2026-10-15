@@ -873,10 +873,10 @@ function CustomerBookingsModal({ customer, onClose, onSelectBookingReceipt }) {
                     {/* Dates */}
                     <td>
                       <div style={{ fontSize: 12.5, color: '#0f172a', fontWeight: 600 }}>
-                        Pohnch: {b.delivery_date || '—'}
+                        DD: {b.delivery_date || '—'}
                       </div>
                       <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
-                        Wapsi: {b.returning_date || 'Open'}
+                        RD: {b.returning_date || 'Open'}
                       </div>
                       {b.delivered_on && (
                         <div style={{ fontSize: 10.5, color: '#16a34a', marginTop: 2, fontWeight: 600 }}>

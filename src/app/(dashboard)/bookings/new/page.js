@@ -254,6 +254,259 @@ function DressPicker({ value, valueName, onSelect, disabled }) {
   );
 }
 
+// ─── Size Picker with Learning Dropdown + Custom Size (S, M, L, 36, 24, 36/32, etc.) ─────
+function SizePicker({ value, onChange, disabled }) {
+  const DEFAULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '34', '36', '38', '40', '42', 'Free Size'];
+  const [options, setOptions] = useState([]);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    async function fetchSizes() {
+      try {
+        const res = await window.electronAPI?.lists.get('dress_sizes');
+        if (res?.ok && Array.isArray(res.data) && res.data.length > 0) {
+          setOptions(res.data);
+        } else {
+          setOptions(DEFAULT_SIZES.map((s, idx) => ({ id: idx + 1, name: s })));
+        }
+      } catch {
+        setOptions(DEFAULT_SIZES.map((s, idx) => ({ id: idx + 1, name: s })));
+      }
+    }
+    fetchSizes();
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const trimmedQuery = query.trim();
+  const filtered = trimmedQuery
+    ? options.filter(o => o.name.toLowerCase().includes(trimmedQuery.toLowerCase()))
+    : options;
+
+  const exactMatch = options.some(o => o.name.toLowerCase() === trimmedQuery.toLowerCase());
+  const showAdd = trimmedQuery.length > 0 && !exactMatch;
+
+  async function handleAddSize() {
+    if (!trimmedQuery) return;
+    setAdding(true);
+    try {
+      const res = await window.electronAPI?.lists.add('dress_sizes', trimmedQuery);
+      if (res?.ok) {
+        const res2 = await window.electronAPI?.lists.get('dress_sizes');
+        if (res2?.ok && Array.isArray(res2.data)) {
+          setOptions(res2.data);
+        } else {
+          setOptions(prev => [...prev, { id: res.id || Date.now(), name: trimmedQuery }]);
+        }
+      } else {
+        setOptions(prev => [...prev, { id: Date.now(), name: trimmedQuery }]);
+      }
+    } catch {
+      setOptions(prev => [...prev, { id: Date.now(), name: trimmedQuery }]);
+    }
+    onChange(trimmedQuery);
+    setQuery('');
+    setOpen(false);
+    setAdding(false);
+  }
+
+  function handleSelectCustom() {
+    if (!trimmedQuery) return;
+    onChange(trimmedQuery);
+    setQuery('');
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div
+        className="form-input"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          gap: 4,
+          padding: '6px 8px',
+          fontSize: 12.5,
+          minHeight: 34,
+          background: disabled ? '#f8fafc' : 'white',
+          border: open ? '1px solid #7c3aed' : '1px solid #cbd5e1',
+          borderRadius: 8,
+          boxShadow: open ? '0 0 0 2px rgba(124, 58, 237, 0.15)' : 'none',
+        }}
+        onClick={() => {
+          if (!disabled) {
+            setOpen(o => !o);
+            setQuery('');
+          }
+        }}
+        title="Dress Size (Click to choose or type custom)"
+      >
+        <span style={{
+          flex: 1,
+          color: value ? '#0f172a' : '#94a3b8',
+          fontWeight: value ? 700 : 400,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}>
+          {value || 'Size...'}
+        </span>
+        {value && !disabled && (
+          <X
+            size={12}
+            style={{ color: '#94a3b8', flexShrink: 0, cursor: 'pointer' }}
+            onClick={e => {
+              e.stopPropagation();
+              onChange('');
+            }}
+          />
+        )}
+        <ChevronDown size={12} style={{ color: '#94a3b8', flexShrink: 0 }} />
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          minWidth: 190,
+          zIndex: 400,
+          background: 'white',
+          border: '1px solid #cbd5e1',
+          borderRadius: 8,
+          boxShadow: '0 10px 25px rgba(0,0,0,0.18)',
+          marginTop: 3,
+          overflow: 'hidden',
+        }}>
+          <div style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+            <input
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (showAdd) {
+                    handleAddSize();
+                  } else if (filtered.length > 0) {
+                    onChange(filtered[0].name);
+                    setOpen(false);
+                    setQuery('');
+                  }
+                } else if (e.key === 'Escape') {
+                  setOpen(false);
+                }
+              }}
+              placeholder="Size likhein (e.g. 36/32, 24, M)..."
+              style={{
+                width: '100%',
+                border: '1px solid #e2e8f0',
+                borderRadius: 6,
+                padding: '5px 8px',
+                outline: 'none',
+                fontSize: 12,
+                background: 'white',
+                color: '#0f172a',
+              }}
+            />
+          </div>
+
+          <div style={{ maxHeight: 190, overflowY: 'auto' }}>
+            {filtered.map(o => {
+              const isSelected = String(value || '').toLowerCase() === String(o.name).toLowerCase();
+              return (
+                <div
+                  key={o.id || o.name}
+                  onClick={() => {
+                    onChange(o.name);
+                    setQuery('');
+                    setOpen(false);
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    fontSize: 12.5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: isSelected ? '#ede9fe' : 'transparent',
+                    color: isSelected ? '#6d28d9' : '#1e293b',
+                    fontWeight: isSelected ? 700 : 500,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = isSelected ? '#ede9fe' : '#f8fafc'}
+                  onMouseLeave={e => e.currentTarget.style.background = isSelected ? '#ede9fe' : 'transparent'}
+                >
+                  {isSelected && <Check size={12} color="#7c3aed" />}
+                  <span>{o.name}</span>
+                </div>
+              );
+            })}
+
+            {showAdd && (
+              <>
+                <div
+                  onClick={handleAddSize}
+                  style={{
+                    padding: '8px 10px',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    color: '#7c3aed',
+                    fontWeight: 700,
+                    borderTop: '1px solid #e2e8f0',
+                    background: '#f5f3ff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#ede9fe'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#f5f3ff'}
+                >
+                  {adding ? <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={12} />}
+                  <span>&quot;{trimmedQuery}&quot; Add &amp; Save karein</span>
+                </div>
+
+                <div
+                  onClick={handleSelectCustom}
+                  style={{
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    fontSize: 11.5,
+                    color: '#475569',
+                    fontWeight: 600,
+                    borderTop: '1px dashed #e2e8f0',
+                    background: '#ffffff',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}
+                  title="List mein save kiye baghair sirf is dress ke liye use karein"
+                >
+                  ⚡ Sirf is dress ke liye use karein
+                </div>
+              </>
+            )}
+
+            {filtered.length === 0 && !showAdd && (
+              <div style={{ padding: 10, color: '#94a3b8', fontSize: 12 }}>Koi size nahi mila</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Customer Card with Search + Inline New Customer Creation ────────────────
 function CustomerCard({ customer, onSelectCustomer, disabled }) {
   const [isCreating, setIsCreating] = useState(false);
@@ -1279,14 +1532,17 @@ export default function NewBookingPage() {
 
   // Item helpers
   function setItem(key, field, val) {
+    setSaved(false);
     setItems(prev => prev.map(it => it._key === key ? { ...it, [field]: val } : it));
   }
 
   function removeItem(key) {
+    setSaved(false);
     setItems(prev => prev.length > 1 ? prev.filter(it => it._key !== key) : prev);
   }
 
   function addItem() {
+    setSaved(false);
     if (!deliveryDate) {
       setDeliveryWarning(true);
       const el = document.getElementById('delivery-date-field');
@@ -1540,7 +1796,7 @@ export default function NewBookingPage() {
   }, [status, cityId, bookingDate, deliveryDate, returningDate, notes, customer, items, discount, saved, editBookingId]);
 
   async function handleSave(opts = {}) {
-    if (saving || saved || isViewer) return;
+    if (saving || isViewer) return;
     setError('');
 
     if (!customer?.id) {
@@ -1819,16 +2075,14 @@ export default function NewBookingPage() {
                       </div>
                     )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '120px 100px 120px 1fr', gap: 10, paddingLeft: 28 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '135px 95px 115px 1fr', gap: 10, paddingLeft: 28 }}>
                       <div>
                         <label style={labelStyle}>Size</label>
-                        <select className="form-input form-select" style={{ fontSize: 12 }} value={it.size || ''}
-                          onChange={e => setItem(it._key, 'size', e.target.value)} disabled={isViewer}>
-                          <option value="">—</option>
-                          {['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Free Size'].map(s =>
-                            <option key={s} value={s}>{s}</option>
-                          )}
-                        </select>
+                        <SizePicker
+                          value={it.size || ''}
+                          onChange={newSize => setItem(it._key, 'size', newSize)}
+                          disabled={isViewer}
+                        />
                       </div>
                       <div>
                         <label style={labelStyle}>Qty</label>
@@ -2572,7 +2826,16 @@ export default function NewBookingPage() {
         <ReceiptModal
           bookingId={receiptBookingId || editBookingId}
           isOpen={showReceiptModal}
-          onClose={() => setShowReceiptModal(false)}
+          onClose={() => {
+            setShowReceiptModal(false);
+            router.push('/bookings');
+            window.location.href = '/bookings';
+          }}
+          onPrintComplete={() => {
+            setShowReceiptModal(false);
+            router.push('/bookings');
+            window.location.href = '/bookings';
+          }}
         />
       )}
     </div>

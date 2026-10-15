@@ -83,10 +83,10 @@ function ActionMenu({ items }) {
 // ─── Status Badge ────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
   const map = {
-    None:    { cls: 'badge-gray',    label: 'None' },
-    Open:    { cls: 'badge-info',    label: 'Open' },
+    None: { cls: 'badge-gray', label: 'None' },
+    Open: { cls: 'badge-info', label: 'Open' },
     Pending: { cls: 'badge-warning', label: 'Pending' },
-    Closed:  { cls: 'badge-success', label: 'Closed' },
+    Closed: { cls: 'badge-success', label: 'Closed' },
   };
   const s = map[status] || map.None;
   return (
@@ -139,9 +139,9 @@ function ConditionBadge({ status }) {
 // ─── Learning Combobox (category) ────────────────────────────────────────────
 function CategoryCombobox({ value, onChange, disabled }) {
   const [options, setOptions] = useState([]);
-  const [query,   setQuery]   = useState('');
-  const [open,    setOpen]    = useState(false);
-  const [adding,  setAdding]  = useState(false);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -160,7 +160,7 @@ function CategoryCombobox({ value, onChange, disabled }) {
 
   const selectedLabel = options.find(o => o.id === value)?.name || '';
   const filtered = query ? options.filter(o => o.name.toLowerCase().includes(query.toLowerCase())) : options;
-  const showAdd  = query.trim() && !options.some(o => o.name.toLowerCase() === query.trim().toLowerCase());
+  const showAdd = query.trim() && !options.some(o => o.name.toLowerCase() === query.trim().toLowerCase());
 
   async function handleAdd() {
     if (!query.trim()) return;
@@ -237,9 +237,9 @@ function DressModal({ editDress, onClose, onSaved, userRole }) {
     attachments: [],
   });
   const [customAttachInput, setCustomAttachInput] = useState('');
-  const [similar,  setSimilar]  = useState([]);
-  const [saving,   setSaving]   = useState(false);
-  const [error,    setError]    = useState('');
+  const [similar, setSimilar] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [codeHint, setCodeHint] = useState('');
 
   const [learnedAttachments, setLearnedAttachments] = useState([]);
@@ -251,7 +251,7 @@ function DressModal({ editDress, onClose, onSaved, userRole }) {
       if (res?.ok && Array.isArray(res.data)) {
         setLearnedAttachments(res.data);
       }
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   useEffect(() => {
@@ -287,7 +287,7 @@ function DressModal({ editDress, onClose, onSaved, userRole }) {
         if (res?.ok && res.id) {
           setLearnedAttachments(prev => [...prev, { id: res.id, name: item }]);
         }
-      } catch (_) {}
+      } catch (_) { }
     }
   };
 
@@ -301,10 +301,10 @@ function DressModal({ editDress, onClose, onSaved, userRole }) {
     try {
       await window.electronAPI?.lists.disable('dress_attachments', opt.id);
       setLearnedAttachments(prev => prev.filter(o => o.id !== opt.id));
-    } catch (_) {}
+    } catch (_) { }
   };
 
-  const isOwner  = userRole === 'owner';
+  const isOwner = userRole === 'owner';
   const isViewer = userRole === 'viewer';
 
   useEffect(() => {
@@ -614,11 +614,11 @@ function DressModal({ editDress, onClose, onSaved, userRole }) {
 
 // ─── Dress History Modal ──────────────────────────────────────────────────────
 function DressHistoryModal({ dress, onClose, onSelectBookingReceipt }) {
-  const [data, setData]       = useState(null);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
+  const [error, setError] = useState('');
   const [sizeFilter, setSizeFilter] = useState('all');
-  const [search, setSearch]   = useState('');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (!dress?.id) return;
@@ -716,11 +716,11 @@ function DressHistoryModal({ dress, onClose, onSelectBookingReceipt }) {
   const rawBookings = data?.bookings || [];
   const bookings = search.trim()
     ? rawBookings.filter(b =>
-        String(b.booking_no).includes(search.trim()) ||
-        (b.customer_name && b.customer_name.toLowerCase().includes(search.toLowerCase())) ||
-        (b.customer_phone && b.customer_phone.includes(search)) ||
-        (b.city && b.city.toLowerCase().includes(search.toLowerCase()))
-      )
+      String(b.booking_no).includes(search.trim()) ||
+      (b.customer_name && b.customer_name.toLowerCase().includes(search.toLowerCase())) ||
+      (b.customer_phone && b.customer_phone.includes(search)) ||
+      (b.city && b.city.toLowerCase().includes(search.toLowerCase()))
+    )
     : rawBookings;
 
   const sizes = data?.sizesAvailable || [];
@@ -899,10 +899,10 @@ function DressHistoryModal({ dress, onClose, onSelectBookingReceipt }) {
                     {/* Dates */}
                     <td>
                       <div style={{ fontSize: 12.5, color: '#0f172a', fontWeight: 600 }}>
-                        {b.delivery_date || '—'}
+                        {`DD: ${b.delivery_date || '—'}`}
                       </div>
                       <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
-                        {b.returning_date ? `Wapsi: ${b.returning_date}` : 'Wapsi: Open'}
+                        {b.returning_date ? `RD: ${b.returning_date}` : 'Wapsi: Open'}
                       </div>
                     </td>
 
@@ -978,22 +978,22 @@ const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#6
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DressesPage() {
-  const [dresses,    setDresses]    = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [search,          setSearch]          = useState('');
-  const [categoryId,      setCategoryId]      = useState('');
+  const [dresses, setDresses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [conditionFilter, setConditionFilter] = useState('');
-  const [activeOnly,      setActiveOnly]      = useState(false);
-  const [inactiveOnly,    setInactiveOnly]    = useState(false);
+  const [activeOnly, setActiveOnly] = useState(false);
+  const [inactiveOnly, setInactiveOnly] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState(null);
   const [deactivateRemark, setDeactivateRemark] = useState('');
-  const [deactivating,     setDeactivating]     = useState(false);
-  const [remarkDress,      setRemarkDress]      = useState(null);
-  const [categories,      setCategories]      = useState([]);
-  const [modal,           setModal]           = useState(null);
-  const [userRole,        setUserRole]        = useState('viewer');
-  const [togglingId,      setTogglingId]      = useState(null);
-  const [exporting,        setExporting]        = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+  const [remarkDress, setRemarkDress] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [modal, setModal] = useState(null);
+  const [userRole, setUserRole] = useState('viewer');
+  const [togglingId, setTogglingId] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   // History & Receipt Modal state
   const [historyDress, setHistoryDress] = useState(null);
@@ -1075,9 +1075,9 @@ export default function DressesPage() {
     }
   }
 
-  const isOwner  = userRole === 'owner';
+  const isOwner = userRole === 'owner';
   const isViewer = userRole === 'viewer';
-  const active   = dresses.filter(d => d.active).length;
+  const active = dresses.filter(d => d.active).length;
   const inactive = dresses.filter(d => !d.active).length;
 
   return (

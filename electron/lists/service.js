@@ -22,6 +22,7 @@ const ALLOWED_TABLES = Object.freeze({
   relation_types:   'relation_types',
   dress_categories: 'dress_categories',
   dress_attachments:'dress_attachments',
+  dress_sizes:      'dress_sizes',
 });
 
 function createListsService(db) {
@@ -135,7 +136,7 @@ function createListsService(db) {
   // ─── DISABLE (Owner for lists, Cashier+Owner for dress_attachments) ────
   function disable(session, tableName, id) {
     validateTable(tableName);
-    const allowedRoles = tableName === 'dress_attachments'
+    const allowedRoles = (tableName === 'dress_attachments' || tableName === 'dress_sizes')
       ? [ROLES.OWNER, ROLES.CASHIER]
       : [ROLES.OWNER];
     const user = requireRole(session, allowedRoles);

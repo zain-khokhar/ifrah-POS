@@ -297,6 +297,9 @@ function seedDefaults() {
     'Syed', 'Butt', 'Mughal', 'Ansari', 'Qureshi', 'Khokhar',
     'Awan', 'Kashmiri', 'Chaudhry', 'Other',
   ]);
+  lists.seedIfMissing('dress_sizes', [
+    'XS', 'S', 'M', 'L', 'XL', 'XXL', '34', '36', '38', '40', '42', 'Free Size',
+  ]);
 }
 
 let appPort = 3000;

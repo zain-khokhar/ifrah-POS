@@ -392,9 +392,25 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_dress_maintenance_status ON dress_maintenance_logs(status)`,
 
   // ──────────────────────────────────────────────────────────────────────────
+  // ──────────────────────────────────────────────────────────────────────────
   // 17. DRESS_ATTACHMENTS (Learning list for accessories & attachments)
   // ──────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS dress_attachments (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
+    name            TEXT    NOT NULL,
+    name_normalized TEXT    NOT NULL UNIQUE,
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    deleted_at      TEXT    DEFAULT NULL,
+    sync_status     TEXT    NOT NULL DEFAULT 'local',
+    last_synced_at  TEXT    DEFAULT NULL
+  )`,
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 18. DRESS_SIZES (Learning list for dress sizes: S, M, L, XL, 36, etc.)
+  // ──────────────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS dress_sizes (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
     name            TEXT    NOT NULL,

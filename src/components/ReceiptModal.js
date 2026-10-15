@@ -411,6 +411,19 @@ export default function ReceiptModal({ bookingId, isOpen, onClose, onPrintComple
               >
                 Open Windows Print Dialog
               </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="btn btn-secondary"
+                style={{
+                  padding: '9px', fontSize: 12.5, fontWeight: 700,
+                  display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6,
+                  marginTop: 4, background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#334155',
+                }}
+              >
+                <X size={15} /> Modal Band Karein (Close)
+              </button>
             </div>
           </div>
 

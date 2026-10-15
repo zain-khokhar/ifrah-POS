@@ -248,6 +248,33 @@ function runMigrations(db) {
     // Start clean without hardcoded defaults; attachments learn dynamically as user types
   } catch {}
 
+  // Dress sizes learning table
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS dress_sizes (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id         TEXT    NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
+        name            TEXT    NOT NULL,
+        name_normalized TEXT    NOT NULL UNIQUE,
+        created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        deleted_at      TEXT    DEFAULT NULL,
+        sync_status     TEXT    NOT NULL DEFAULT 'local',
+        last_synced_at  TEXT    DEFAULT NULL
+      );
+    `);
+    const count = db.prepare('SELECT count(*) as c FROM dress_sizes').get()?.c || 0;
+    if (count === 0) {
+      const stmt = db.prepare('INSERT OR IGNORE INTO dress_sizes (name, name_normalized) VALUES (?, ?)');
+      const defaults = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '34', '36', '38', '40', '42', 'Free Size'];
+      for (const d of defaults) {
+        stmt.run(d, d.trim().toLowerCase());
+      }
+    }
+  } catch (err) {
+    console.warn('[DB] dress_sizes init note:', err.message);
+  }
+
   // Seed default settings if empty
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS settings (
