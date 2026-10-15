@@ -9,7 +9,7 @@
  * Click a booking number → navigate to that booking for editing.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Search, Calendar, CheckCircle, XCircle, AlertTriangle,
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 // ─── Date input helper (Interactive Calendar Picker) ────────────────────────
-function DateInput({ value, onChange, id, label, required = false }) {
+function DateInput({ value, onChange, id, label, required = false, min }) {
   return (
     <div className="form-group" style={{ flex: 1, minWidth: 220, marginBottom: 0 }}>
       {label && (
@@ -33,6 +33,7 @@ function DateInput({ value, onChange, id, label, required = false }) {
           className="form-input"
           value={value || ''}
           required={required}
+          min={min}
           onChange={e => onChange(e.target.value)}
           onClick={e => {
             try { e.target.showPicker?.(); } catch {}
@@ -102,8 +103,8 @@ function AvailBadge({ status }) {
 export default function AvailabilityPage() {
   const today = new Date().toISOString().slice(0, 10);
 
-  const [deliveryDate,  setDeliveryDate]  = useState(today);
-  const [returningDate, setReturningDate] = useState('');
+  const [fromDate,      setFromDate]      = useState(today);
+  const [toDate,        setToDate]        = useState(today);
   const [nameFilter,    setNameFilter]    = useState('');
   const [showFilter,    setShowFilter]    = useState('all'); // 'all' | 'available' | 'booked'
   const [dresses,       setDresses]       = useState([]);
@@ -113,14 +114,14 @@ export default function AvailabilityPage() {
   const [expandedDress, setExpandedDress] = useState(null);
 
   const handleSearch = useCallback(async () => {
-    if (!deliveryDate) { setError('Delivery date daalna zaroori hai.'); return; }
+    if (!fromDate || !toDate) { setError('From aur To dono dates daalna zaroori hai.'); return; }
+    if (toDate < fromDate) { setError('To date, From date se pehle nahi ho sakti.'); return; }
     setError('');
     setLoading(true);
-    setSearched(false);
     try {
       const res = await window.electronAPI?.availability.getDresses({
-        deliveryDate,
-        returningDate: returningDate || null,
+        deliveryDate: fromDate,
+        returningDate: toDate,
       });
       if (res?.ok) {
         setDresses(res.data || []);
@@ -133,7 +134,18 @@ export default function AvailabilityPage() {
       setLoading(false);
       setSearched(true);
     }
-  }, [deliveryDate, returningDate]);
+  }, [fromDate, toDate]);
+
+  // Keep range valid and auto-refresh results whenever the range changes
+  const handleFromChange = (v) => {
+    setFromDate(v);
+    if (v && toDate && toDate < v) setToDate(v);
+  };
+
+  useEffect(() => {
+    if (searched && fromDate && toDate && toDate >= fromDate) handleSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromDate, toDate]);
 
   // Filter by name + code + status
   const filtered = dresses.filter(d => {
@@ -154,7 +166,7 @@ export default function AvailabilityPage() {
       {/* ── Header ─────────────────────────────────────────── */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Dress Availability</h1>
+          <h1 className="page-title">Dress Availability Checking</h1>
           <p className="page-subtitle">
             Kisi bhi date range ke liye check karein kaun si dresses available hain aur kaun si booked hain
           </p>
@@ -166,23 +178,25 @@ export default function AvailabilityPage() {
         <div className="card" style={{ marginBottom: 20, padding: '20px 24px' }}>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <DateInput
-              id="avail-delivery"
-              label="Delivery Date *"
-              value={deliveryDate}
-              onChange={setDeliveryDate}
+              id="avail-from"
+              label="Custom Date — From *"
+              value={fromDate}
+              onChange={handleFromChange}
               required
             />
             <DateInput
-              id="avail-returning"
-              label="Returning Date (optional)"
-              value={returningDate}
-              onChange={setReturningDate}
+              id="avail-to"
+              label="Custom Date — To *"
+              value={toDate}
+              onChange={setToDate}
+              min={fromDate}
+              required
             />
             <div style={{ flex: '0 0 auto' }}>
               <button
                 className="btn btn-primary"
-                onClick={handleSearch}
-                disabled={loading || !deliveryDate}
+                onClick={async () => { await handleSearch(); setSearched(true); }}
+                disabled={loading || !fromDate || !toDate}
                 style={{ height: 42, minWidth: 160, fontWeight: 700 }}
               >
                 {loading
@@ -443,7 +457,7 @@ export default function AvailabilityPage() {
               Dates select karein
             </div>
             <div style={{ color: '#64748b', fontSize: 13 }}>
-              Upar delivery aur returning date dal kar &ldquo;Check Availability&rdquo; dabayein.
+              Upar From aur To date (custom range) dal kar &ldquo;Check Availability&rdquo; dabayein.
             </div>
           </div>
         )}
