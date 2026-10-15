@@ -49,6 +49,7 @@ function createTrackingService(db, bookingsService, paymentsService) {
     search = '',
     dateFrom = null,
     dateTo = null,
+    statusFilter = null, // 'pending' | 'delivered' | null — combines with custom range
   } = {}) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
 
@@ -83,6 +84,8 @@ function createTrackingService(db, bookingsService, paymentsService) {
       const to   = dateTo || dateFrom;
       conditions.push('b.delivery_date >= ? AND b.delivery_date <= ?');
       params.push(from, to);
+      if (statusFilter === 'pending')        conditions.push('b.delivered_on IS NULL');
+      else if (statusFilter === 'delivered') conditions.push('b.delivered_on IS NOT NULL');
     } else if (date) {
       conditions.push('b.delivery_date = ? AND b.delivered_on IS NULL');
       params.push(date);

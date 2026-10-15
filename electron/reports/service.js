@@ -80,6 +80,7 @@ function createReportsService(db, settingsService) {
     dateTo = null,
     cityId = null,
     readinessFilter = null, // 'fully_ready' | 'pending_ready' | null
+    statusFilter = null,    // 'pending' | 'delivered' | null — combines with custom range
   } = {}) {
     requireRole(session, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]);
 
@@ -123,6 +124,15 @@ function createReportsService(db, settingsService) {
       params.push(startDate, endDate);
       subtitle = `Deliveries scheduled from ${startDate} to ${endDate}`;
       filtersSummary = `Range: ${startDate} to ${endDate}`;
+      if (statusFilter === 'pending') {
+        conditions.push('b.delivered_on IS NULL');
+        subtitle += ' (Pending only)';
+        filtersSummary += ' • Status: Pending';
+      } else if (statusFilter === 'delivered') {
+        conditions.push('b.delivered_on IS NOT NULL');
+        subtitle += ' (Delivered only)';
+        filtersSummary += ' • Status: Delivered';
+      }
     } else if (activeFilter === 'pending') {
       conditions.push('b.delivered_on IS NULL');
       subtitle = 'All Pending Deliveries (تمام غیر مکمل شدہ ڈلیوریز)';
@@ -144,7 +154,7 @@ function createReportsService(db, settingsService) {
       filtersSummary = `Today: ${today}`;
     }
 
-    if (excludeDelivered && activeFilter !== 'delivered' && activeFilter !== 'pending') {
+    if (excludeDelivered && activeFilter !== 'delivered' && activeFilter !== 'pending' && !statusFilter) {
       conditions.push('b.delivered_on IS NULL');
     }
 
@@ -167,7 +177,7 @@ function createReportsService(db, settingsService) {
 
     const rows = db.prepare(`
       SELECT
-        b.id, b.booking_no, b.status,
+        b.id, b.booking_no, b.status, b.booking_date,
         b.delivery_date, b.returning_date, b.delivered_on, b.delivery_note,
         b.grand_total, b.amount_paid, b.remaining, b.security_deposit,
         cu.name AS customer_name, cu.phone AS customer_phone, cu.cnic AS customer_cnic,
@@ -289,6 +299,8 @@ function createReportsService(db, settingsService) {
       }).join(' • ');
 
       // Plain text representations for Excel
+      const bookingDateText = r.booking_date || '—';
+      const bookingDateHtml = `<div style="color: #334155; font-size: 10.5px;">${escapeHtml(r.booking_date || '—')}</div>`;
       const bookingDisplayText = `#${r.booking_no}${r.status ? `\n${r.status}` : ''}`;
       const customerDisplayText = [r.customer_name, r.customer_phone, r.city].filter(Boolean).join('\n');
       const deliveryDateDisplayText = `${r.delivery_date}${r.delivered_on ? `\nDelivered: ${r.delivered_on}` : ''}`;
@@ -393,6 +405,8 @@ function createReportsService(db, settingsService) {
 
         // Field keys matching the exact 7 UI columns
         booking_display: bookingDisplayText,
+        booking_date_display: bookingDateText,
+        booking_date_display_html: bookingDateHtml,
         customer_display: customerDisplayText,
         delivery_date_display: deliveryDateDisplayText,
         returning_date: returnDateDisplayText,
@@ -438,6 +452,7 @@ function createReportsService(db, settingsService) {
       orientation: 'landscape',
       columns: [
         { header: 'BOOKING #', key: 'booking_display', width: 14, align: 'center', isText: true },
+        { header: 'BOOKING DATE', key: 'booking_date_display', width: 14, align: 'center', isText: true },
         { header: 'CUSTOMER', key: 'customer_display', width: 28, align: 'left', isText: true },
         { header: 'DELIVERY DATE', key: 'delivery_date_display', width: 16, align: 'center', isText: true },
         { header: 'RETURN DATE', key: 'returning_date', width: 16, align: 'center', isText: true },
@@ -448,6 +463,7 @@ function createReportsService(db, settingsService) {
       rows: enrichedRows2,
       totals: {
         booking_display: `${enrichedRows2.length} Bookings`,
+        booking_date_display: '',
         customer_display: '',
         delivery_date_display: '',
         returning_date: '',
