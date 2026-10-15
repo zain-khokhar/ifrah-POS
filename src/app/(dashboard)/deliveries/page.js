@@ -81,6 +81,8 @@ function DeliveriesContent() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo]     = useState('');
   const [showCustomRange, setShowCustomRange] = useState(false);
+  // Status filter (pending | delivered | '') that combines with Custom Range
+  const [statusFilter, setStatusFilter] = useState('');
 
   // Readiness sub-filters (UI only — applied after fetch)
   const [showFullyReady, setShowFullyReady]     = useState(false);
@@ -124,6 +126,7 @@ function DeliveriesContent() {
     if (filter !== 'custom') {
       setCustomFrom('');
       setCustomTo('');
+      setStatusFilter('');
     }
   }, [filter]);
 
@@ -138,6 +141,7 @@ function DeliveriesContent() {
         if (filter === 'custom' && customFrom) {
           payload.dateFrom = customFrom;
           payload.dateTo   = customTo || customFrom;
+          if (statusFilter) payload.statusFilter = statusFilter;
         }
 
         let res = await window.electronAPI?.tracking?.listDeliveries(payload);
@@ -168,7 +172,7 @@ function DeliveriesContent() {
     }
     reloadRef.current = fetchDeliveries;
     fetchDeliveries();
-  }, [filter, search, customFrom, customTo]);
+  }, [filter, search, customFrom, customTo, statusFilter]);
 
   // Per-item "Ready / Prepared" toggle (Night-before prep)
   async function handleToggleReady(itemId, currentVal, conditionStatus = null) {
@@ -356,6 +360,12 @@ function DeliveriesContent() {
       if (filter === 'custom' && customFrom) {
         filters.dateFrom = customFrom;
         filters.dateTo   = customTo || customFrom;
+        if (statusFilter) {
+          filters.statusFilter = statusFilter;
+          filters.excludeDelivered = false;
+        } else {
+          filters.excludeDelivered = false; // custom range + no status = all in range
+        }
       }
       // Pass readiness sub-filters
       if (showFullyReady)     filters.readinessFilter = 'fully_ready';
@@ -391,6 +401,8 @@ function DeliveriesContent() {
       if (filter === 'custom' && customFrom) {
         filters.dateFrom = customFrom;
         filters.dateTo   = customTo || customFrom;
+        if (statusFilter) filters.statusFilter = statusFilter;
+        filters.excludeDelivered = false;
       }
       if (showFullyReady)     filters.readinessFilter = 'fully_ready';
       else if (showPendingReady) filters.readinessFilter = 'pending_ready';
@@ -415,6 +427,11 @@ function DeliveriesContent() {
 
   // Base filter (delivered / not delivered)
   let baseDeliveries = deliveries.filter(d => {
+    if (filter === 'custom') {
+      if (statusFilter === 'pending')   return !d.delivered_on;
+      if (statusFilter === 'delivered') return Boolean(d.delivered_on);
+      return true;
+    }
     if (filter === 'delivered') return Boolean(d.delivered_on);
     if (filter === 'all') return true;
     return !d.delivered_on;
@@ -518,13 +535,26 @@ function DeliveriesContent() {
         {/* ── Filters & Search Bar ──────────────────────────── */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {FILTERS.map(f => (
+            {FILTERS.map(f => {
+              const isStatusChip = f.id === 'pending' || f.id === 'delivered';
+              // In custom mode, Pending/Delivered chips act as an extra status filter
+              const active = filter === 'custom' && isStatusChip
+                ? statusFilter === f.id
+                : filter === f.id;
+              return (
               <button
                 key={f.id}
-                onClick={() => setFilter(f.id)}
-                className={`btn btn-sm ${filter === f.id ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => {
+                  if (filter === 'custom' && isStatusChip) {
+                    setStatusFilter(prev => (prev === f.id ? '' : f.id));
+                  } else {
+                    setFilter(f.id);
+                  }
+                }}
+                title={filter === 'custom' && isStatusChip ? 'Custom Range ke saath combine hoga (dobara click = hata dein)' : undefined}
+                className={`btn btn-sm ${active ? 'btn-primary' : 'btn-secondary'}`}
                 style={{
-                  fontWeight: filter === f.id ? 700 : 500,
+                  fontWeight: active ? 700 : 500,
                   fontSize: 12.5,
                   padding: '5px 12px',
                   borderRadius: 20,
@@ -534,7 +564,8 @@ function DeliveriesContent() {
                 {f.id === 'custom' && <Calendar size={12} style={{ marginRight: 4, display: 'inline' }} />}
                 {f.label}
               </button>
-            ))}
+              );
+            })}
           </div>
 
           <div style={{ position: 'relative', width: 280, maxWidth: '100%' }}>
@@ -626,6 +657,11 @@ function DeliveriesContent() {
             {!customFrom && (
               <span style={{ fontSize: 11.5, color: '#94a3b8', fontStyle: 'italic' }}>
                 Select a start date to load results
+              </span>
+            )}
+            {customFrom && (
+              <span style={{ fontSize: 11.5, color: '#6d28d9', fontWeight: 600 }}>
+                Status: {statusFilter === 'pending' ? 'Pending' : statusFilter === 'delivered' ? 'Delivered' : 'Sabhi'} (upar Pending / Delivered se badlein)
               </span>
             )}
           </div>

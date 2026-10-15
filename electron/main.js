@@ -202,15 +202,48 @@ function createWindow(serverPort) {
     }
   });
 
-  if (!isDev) {
-    // Automatically close DevTools if triggered or attached
-    win.webContents.on('devtools-opened', () => {
-      win.webContents.closeDevTools();
-    });
+  // ── Keyboard Shortcuts (Zoom In/Out/Reset & Anti-DevTools) ───────────────
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
 
-    // Block keyboard inspection shortcuts (F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, Ctrl+U, Ctrl+R)
-    win.webContents.on('before-input-event', (event, input) => {
-      const isCtrlOrCmd = input.control || input.meta;
+    const isCtrlOrCmd = input.control || input.meta;
+
+    // Zoom In: Ctrl + Plus, Ctrl + '=', Ctrl + NumpadAdd (with or without Shift)
+    if (
+      isCtrlOrCmd &&
+      (input.key === '=' || input.key === '+' || input.code === 'Equal' || input.code === 'NumpadAdd')
+    ) {
+      event.preventDefault();
+      const current = win.webContents.getZoomFactor();
+      const next = Math.min(Math.round((current + 0.1) * 10) / 10, 3.0);
+      win.webContents.setZoomFactor(next);
+      return;
+    }
+
+    // Zoom Out: Ctrl + Minus, Ctrl + '_', Ctrl + NumpadSubtract
+    if (
+      isCtrlOrCmd &&
+      (input.key === '-' || input.key === '_' || input.code === 'Minus' || input.code === 'NumpadSubtract')
+    ) {
+      event.preventDefault();
+      const current = win.webContents.getZoomFactor();
+      const next = Math.max(Math.round((current - 0.1) * 10) / 10, 0.5);
+      win.webContents.setZoomFactor(next);
+      return;
+    }
+
+    // Reset Zoom: Ctrl + 0 or Ctrl + Numpad0
+    if (
+      isCtrlOrCmd &&
+      (input.key === '0' || input.code === 'Digit0' || input.code === 'Numpad0')
+    ) {
+      event.preventDefault();
+      win.webContents.setZoomFactor(1.0);
+      return;
+    }
+
+    if (!isDev) {
+      // Block keyboard inspection shortcuts (F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, Ctrl+U, Ctrl+R)
       if (
         input.key === 'F12' ||
         (isCtrlOrCmd && input.shift && ['I', 'i', 'J', 'j', 'C', 'c'].includes(input.key)) ||
@@ -218,6 +251,13 @@ function createWindow(serverPort) {
       ) {
         event.preventDefault();
       }
+    }
+  });
+
+  if (!isDev) {
+    // Automatically close DevTools if triggered or attached
+    win.webContents.on('devtools-opened', () => {
+      win.webContents.closeDevTools();
     });
 
     // Block right-click context menu (prevents "Inspect Element")
@@ -512,6 +552,33 @@ ipcMain.handle('app:maximize', safeHandler((e) => {
   if (win?.isMaximized()) win.unmaximize(); else win?.maximize();
 }));
 ipcMain.handle('app:close', safeHandler((e) => { protect(e, [ROLES.OWNER, ROLES.CASHIER, ROLES.VIEWER]); BrowserWindow.fromWebContents(e.sender)?.close(); }));
+ipcMain.handle('app:zoom-in', safeHandler((e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return { ok: false };
+  const current = win.webContents.getZoomFactor();
+  const next = Math.min(Math.round((current + 0.1) * 10) / 10, 3.0);
+  win.webContents.setZoomFactor(next);
+  return { ok: true, zoom: next };
+}, { skipSecurityCheck: true }));
+ipcMain.handle('app:zoom-out', safeHandler((e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return { ok: false };
+  const current = win.webContents.getZoomFactor();
+  const next = Math.max(Math.round((current - 0.1) * 10) / 10, 0.5);
+  win.webContents.setZoomFactor(next);
+  return { ok: true, zoom: next };
+}, { skipSecurityCheck: true }));
+ipcMain.handle('app:zoom-reset', safeHandler((e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return { ok: false };
+  win.webContents.setZoomFactor(1.0);
+  return { ok: true, zoom: 1.0 };
+}, { skipSecurityCheck: true }));
+ipcMain.handle('app:get-zoom', safeHandler((e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return { ok: false, zoom: 1.0 };
+  return { ok: true, zoom: win.webContents.getZoomFactor() };
+}, { skipSecurityCheck: true }));
 
 // ─── IPC — Licensing & Anti-Piracy ──────────────────────────────────────────
 ipcMain.handle('license:check', safeHandler(() => {
