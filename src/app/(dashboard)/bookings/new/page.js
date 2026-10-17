@@ -2387,9 +2387,42 @@ export default function NewBookingPage() {
                         value={advanceAmount}
                         onChange={e => setAdvanceAmount(e.target.value)}
                         placeholder="0"
-                        style={{ fontWeight: 700 }}
+                        style={{
+                          fontWeight: 700,
+                          ...(overpaidAmount > 0 ? {
+                            borderColor: '#ef4444',
+                            backgroundColor: '#fef2f2',
+                            color: '#b91c1c',
+                          } : {}),
+                        }}
                         disabled={isViewer}
                       />
+                      {overpaidAmount > 0 && (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            padding: '8px 10px',
+                            background: '#fef2f2',
+                            border: '1px solid #fca5a5',
+                            borderRadius: 6,
+                            color: '#dc2626',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 6,
+                            lineHeight: 1.35,
+                          }}
+                        >
+                          <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1, color: '#dc2626' }} />
+                          <div>
+                            <div style={{ fontSize: 12.5, fontWeight: 800 }}>
+                              Overpaid: Rs. {overpaidAmount.toLocaleString()} zyada enter ho gaye!
+                            </div>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: '#991b1b', marginTop: 2 }}>
+                              Grand Total sirf Rs. {grandTotalSafe.toLocaleString()} hai (Advance: Rs. {Number(advanceAmount || 0).toLocaleString()})
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label style={labelStyle}>Payment Method</label>
@@ -2439,7 +2472,11 @@ export default function NewBookingPage() {
                   Hisab Kitab Summary
                 </span>
                 <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700 }}>
-                  {remainingBalance === 0 && grandTotalSafe > 0 ? (
+                  {overpaidAmount > 0 ? (
+                    <span style={{ color: '#dc2626', display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 800 }}>
+                      <AlertTriangle size={13} /> Overpaid (+Rs. {overpaidAmount.toLocaleString()})
+                    </span>
+                  ) : remainingBalance === 0 && grandTotalSafe > 0 ? (
                     <span style={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <CheckCircle size={13} /> Fully Paid
                     </span>
@@ -2483,14 +2520,14 @@ export default function NewBookingPage() {
                   <div style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '10px 12px', borderRadius: 8, marginTop: 4,
-                    background: remainingBalance === 0 && grandTotalSafe > 0 ? '#f0fdf4' : remainingBalance > 0 ? '#fff7ed' : '#f8fafc',
-                    border: `1px solid ${remainingBalance === 0 && grandTotalSafe > 0 ? '#bbf7d0' : remainingBalance > 0 ? '#fed7aa' : '#e2e8f0'}`,
+                    background: overpaidAmount > 0 ? '#fef2f2' : (remainingBalance === 0 && grandTotalSafe > 0 ? '#f0fdf4' : remainingBalance > 0 ? '#fff7ed' : '#f8fafc'),
+                    border: `1px solid ${overpaidAmount > 0 ? '#fecaca' : (remainingBalance === 0 && grandTotalSafe > 0 ? '#bbf7d0' : remainingBalance > 0 ? '#fed7aa' : '#e2e8f0')}`,
                   }}>
-                    <span style={{ fontSize: 12.5, fontWeight: 800, color: remainingBalance === 0 && grandTotalSafe > 0 ? '#16a34a' : remainingBalance > 0 ? '#c2410c' : '#475569' }}>
-                      Remaining Balance:
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: overpaidAmount > 0 ? '#dc2626' : (remainingBalance === 0 && grandTotalSafe > 0 ? '#16a34a' : remainingBalance > 0 ? '#c2410c' : '#475569') }}>
+                      {overpaidAmount > 0 ? 'Overpaid Amount:' : 'Remaining Balance:'}
                     </span>
-                    <span style={{ fontSize: 16, fontWeight: 900, color: remainingBalance === 0 && grandTotalSafe > 0 ? '#16a34a' : remainingBalance > 0 ? '#ea580c' : '#0f172a' }}>
-                      Rs. {remainingBalance.toLocaleString()}
+                    <span style={{ fontSize: 16, fontWeight: 900, color: overpaidAmount > 0 ? '#dc2626' : (remainingBalance === 0 && grandTotalSafe > 0 ? '#16a34a' : remainingBalance > 0 ? '#ea580c' : '#0f172a') }}>
+                      {overpaidAmount > 0 ? `+ Rs. ${overpaidAmount.toLocaleString()}` : `Rs. ${remainingBalance.toLocaleString()}`}
                     </span>
                   </div>
                 </div>
@@ -2532,8 +2569,19 @@ export default function NewBookingPage() {
                 </span>
               )}
               {overpaidAmount > 0 && (
-                <span style={{ fontSize: 9.5, background: '#fee2e2', color: '#dc2626', padding: '1px 5px', borderRadius: 10, fontWeight: 800 }}>
-                  Overpaid (+{overpaidAmount})
+                <span style={{
+                  fontSize: 11,
+                  background: '#fee2e2',
+                  color: '#dc2626',
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  fontWeight: 800,
+                  border: '1px solid #fca5a5',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                }}>
+                  ⚠️ OVERPAID (+Rs. {overpaidAmount.toLocaleString()})
                 </span>
               )}
             </div>
